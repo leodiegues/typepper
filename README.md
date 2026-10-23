@@ -26,6 +26,21 @@ Windows (PowerShell):
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/leodiegues/typepper/releases/latest/download/typepper-installer.ps1 | iex"
 ```
 
+Arch Linux ([AUR](https://aur.archlinux.org/packages/typepper)):
+
+```sh
+# Using yay
+yay -S typepper-bin   # prebuilt
+yay -S typepper       # builds from source
+
+# Using paru
+paru -S typepper-bin   # prebuilt
+paru -S typepper       # builds from source
+```
+
+> [!NOTE]
+> The AUR version is community maintained by [@Vaishnav-Sabari-Girish](https://github.com/Vaishnav-Sabari-Girish/), so it may be a bit behind on the latest release.
+
 Or build it yourself: `cargo install --git https://github.com/leodiegues/typepper`
 
 ## A look
