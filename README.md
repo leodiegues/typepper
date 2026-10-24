@@ -43,6 +43,8 @@ paru -S typepper       # builds from source
 
 Or build it yourself: `cargo install --git https://github.com/leodiegues/typepper typepper`
 
+Installed with one of the installers above? `typepper upgrade` gets you the latest version.
+
 ## A look
 
 Six modes on a carousel: sprint, blitz, zen, survival, floor is lava and hot pursuit.

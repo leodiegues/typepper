@@ -109,8 +109,9 @@ curl -sSIL -o /dev/null -w '%{http_code}\n' \
   https://github.com/leodiegues/typepper/releases/latest/download/typepper-installer.sh
 ```
 
-Expect 5 platform archives (macOS ×2, Linux ×2, Windows), both installers and
-checksums, the site's title, the installer hand-off script, and a `200`.
+Expect 5 platform archives (macOS ×2, Linux ×2, Windows), a
+`typepper-<target>-update` updater for each (what `typepper upgrade` runs),
+both installers and checksums, the site's title, the installer hand-off script, and a `200`.
 Don't run the installer itself without asking: it installs into the user's
 `~/.cargo/bin`.
 

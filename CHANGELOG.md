@@ -4,6 +4,8 @@ What changed in each typepper release, newest first.
 
 ## Unreleased
 
+- Upgrade with `typepper upgrade`. It comes with this version, so re-run the installer once to get it (`curl -LsSf https://typepper.com/install.sh | sh`, or the PowerShell line on Windows). After that, one command does it
+
 ## [0.4.0] - 2026-10-24
 
 - Share a round: press u on the results screen for a link anyone can open to watch it, key by key, in their browser. No account needed

@@ -30,4 +30,9 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: clippy (web)
         run: cargo clippy -p typepper --target wasm32-unknown-unknown --locked -- -D warnings
+      # nothing else builds for Windows before a release tag does
+      - name: clippy (windows)
+        run: |
+          rustup target add x86_64-pc-windows-msvc # here, not in rust-toolchain.toml: the other builds don't need it
+          cargo clippy -p typepper --target x86_64-pc-windows-msvc --locked -- -D warnings
       - run: cargo test --workspace --locked

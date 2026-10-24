@@ -55,6 +55,30 @@ fn main() -> std::io::Result<()> {
             }
             return Ok(());
         }
+        // `typepper upgrade`: hand off to the updater the installer puts next
+        // to us (cargo-dist's typepper-update), which fetches the latest release
+        Some("upgrade") => {
+            let updater = std::env::current_exe()?
+                .with_file_name(format!("typepper-update{}", std::env::consts::EXE_SUFFIX));
+            if !updater.exists() {
+                eprintln!(
+                    "typepper: no updater next to this typepper, so it came from somewhere \
+                     else (AUR, cargo): upgrade it there, or re-run the installer \
+                     (https://github.com/leodiegues/typepper#play)"
+                );
+                std::process::exit(1);
+            }
+            let mut updater = std::process::Command::new(updater);
+            // unix: become the updater. windows: start it and get out of the
+            // way, since a running typepper.exe can't be replaced
+            #[cfg(unix)]
+            return Err(std::os::unix::process::CommandExt::exec(&mut updater));
+            #[cfg(not(unix))]
+            {
+                updater.spawn()?;
+                return Ok(());
+            }
+        }
         _ => {}
     }
     // ask the terminal for its background before raw mode; unanswered → dark
