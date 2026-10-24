@@ -24,6 +24,10 @@ fn main() -> std::io::Result<()> {
 
     let args: Vec<String> = std::env::args().collect();
     let flag = |f: &str| args.iter().any(|a| a == f);
+    if flag("--version") || flag("-V") {
+        println!("typepper {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     // `typepper link <github-login>` / `typepper unlink`: tie this machine's
     // ssh key to a GitHub account, so its rounds go up for the boards
     match args.get(1).map(String::as_str) {

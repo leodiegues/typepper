@@ -510,7 +510,12 @@ pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, now: Instant) {
     ratatui::widgets::Paragraph::new(rows)
         .centered()
         .render(logo, f.buffer_mut());
-    Line::from("a spicy little typing game".dark_gray())
+    // the release this is (the server says its own in /health)
+    let tagline = format!(
+        "a spicy little typing game · v{}",
+        env!("CARGO_PKG_VERSION")
+    );
+    Line::from(tagline.dark_gray())
         .centered()
         .render(tag, f.buffer_mut());
 
