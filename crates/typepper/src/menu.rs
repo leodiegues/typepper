@@ -444,7 +444,8 @@ pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, now: Instant) {
         Constraint::Length(below),
     ])
     .areas(area);
-    let [_, tag, _, cards, _, dot_row, _, help] = Layout::vertical([
+    let [_, tag, version, _, cards, _, dot_row, _, help] = Layout::vertical([
+        Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Fill(1),
@@ -510,14 +511,14 @@ pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, now: Instant) {
     ratatui::widgets::Paragraph::new(rows)
         .centered()
         .render(logo, f.buffer_mut());
-    // the release this is (the server says its own in /health)
-    let tagline = format!(
-        "a spicy little typing game · v{}",
-        env!("CARGO_PKG_VERSION")
-    );
-    Line::from(tagline.dark_gray())
+    Line::from("a spicy little typing game".dark_gray())
         .centered()
         .render(tag, f.buffer_mut());
+    // the release this is (the server says its own in /health), padded so
+    // the scenery keeps a little distance from it
+    Line::from(format!("  v{}  ", env!("CARGO_PKG_VERSION")).dark_gray())
+        .centered()
+        .render(version, f.buffer_mut());
 
     carousel(f.buffer_mut(), cards, m, bests, now, secs);
 
