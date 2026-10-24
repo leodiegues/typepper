@@ -11,7 +11,7 @@ use ratatui::text::Line;
 use web_time::Instant;
 
 use crate::best::{Bests, Outcome};
-use crate::engine::{Game, Input, LEVELS, Mode, Round, Setup, Test};
+use crate::engine::{Game, Input, LEVELS, Mode, Replay, Round, Setup, Test};
 use crate::lava;
 use crate::menu::{self, Dialog, Menu, Pick};
 use crate::settings::{ROWS, Settings};
@@ -35,13 +35,22 @@ pub enum Key {
 enum Screen {
     Title,
     Play(Round),
+    Watch(Watch),
+}
+
+/// A replay playing back: its inputs land on a fresh round as their time comes.
+struct Watch {
+    round: Round,
+    inputs: Vec<(u32, Input)>,
+    next: usize,
 }
 
 impl Screen {
-    /// The round being played (or just finished) on this screen.
+    /// The round on screen, played or watched (or just finished).
     fn round(&self) -> Option<&Round> {
         match self {
             Screen::Play(r) => Some(r),
+            Screen::Watch(w) => Some(&w.round),
             Screen::Title => None,
         }
     }
@@ -78,13 +87,22 @@ pub struct App {
 
 impl App {
     /// `bot`: the demo tour or the autopilot typist, if any (see `Bot`).
-    pub fn new(bot: Option<Bot>) -> Self {
+    /// `watch`: a replay to play back first (its setup already checked).
+    pub fn new(bot: Option<Bot>, watch: Option<(Setup, Replay)>) -> Self {
         let now = Instant::now();
         let detected_light = crate::theme::is_light();
         let settings = Settings::load();
         settings.apply(detected_light);
+        let screen = match watch {
+            Some((setup, replay)) => Screen::Watch(Watch {
+                round: Round::new(setup),
+                inputs: replay.inputs,
+                next: 0,
+            }),
+            None => Screen::Title,
+        };
         App {
-            screen: Screen::Title,
+            screen,
             menu: Menu::new(now),
             bests: Bests::load(),
             settings,
@@ -182,6 +200,8 @@ impl App {
                 Key::Char(c) => r.input(r.ms(now), Input::Char(c)),
                 _ => {}
             },
+            // watching: hands off (esc leaves, tab or enter plays the mode yourself)
+            (Screen::Watch(_), _) => {}
         }
         if let Some(s) = next {
             self.go(s, now);
@@ -216,6 +236,14 @@ impl App {
                 }
             }
             Screen::Title => {}
+            Screen::Watch(w) => {
+                let ms = w.round.ms(now);
+                while let Some(&(at, input)) = w.inputs.get(w.next).filter(|(at, _)| *at <= ms) {
+                    w.round.input(at, input);
+                    w.next += 1;
+                }
+                w.round.advance(ms);
+            }
             Screen::Play(r) => {
                 if let Some(bot) = self.bot.as_mut().filter(|_| !picking) {
                     bot.drive(r, now);
@@ -234,8 +262,13 @@ impl App {
         {
             self.scored = true;
             self.fade = self.frame.take().map(|b| (b, now));
-            if self.bot.is_none() {
-                self.outcome = self.bests.record(r.setup.mode, &round);
+            // a watched replay is someone's past round: nothing to keep
+            if let Screen::Play(r) = &self.screen {
+                // the last round, for `--replay` (and, later, sharing)
+                crate::store::write_bytes("last.replay", &Replay::of(r).encode());
+                if self.bot.is_none() {
+                    self.outcome = self.bests.record(r.setup.mode, &round);
+                }
             }
         }
         if let Some(s) = next {
@@ -265,7 +298,7 @@ impl App {
                     menu::dialog(f, d, &self.settings, now);
                 }
             }
-            Screen::Play(r) => match &r.game {
+            Screen::Play(r) | Screen::Watch(Watch { round: r, .. }) => match &r.game {
                 Game::Lava(l) if l.test.finished.is_none() => lava::draw(f, l, now),
                 _ => ui::draw(f, r.test(), self.outcome),
             },
@@ -275,6 +308,9 @@ impl App {
         }
         if self.bot.as_ref().is_some_and(|b| b.tour) {
             f.render_widget(Line::from(" DEMO ").black().on_magenta().bold(), f.area());
+        }
+        if matches!(self.screen, Screen::Watch(_)) {
+            f.render_widget(Line::from(" REPLAY ").black().on_cyan().bold(), f.area());
         }
         crate::theme::apply(f.buffer_mut());
         if let Some((old, at)) = &self.fade {

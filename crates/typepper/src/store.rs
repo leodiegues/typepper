@@ -1,4 +1,4 @@
-//! Small text files that survive restarts: under the data dir on desktop
+//! Small files that survive restarts: under the data dir on desktop
 //! (`$XDG_DATA_HOME/typepper/<name>`), in localStorage on the web.
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -43,3 +43,41 @@ mod imp {
 }
 
 pub use imp::{read, write};
+
+/// Bytes, kept as hex (localStorage only holds text).
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the web reads them once it uploads
+pub fn read_bytes(name: &str) -> Option<Vec<u8>> {
+    unhex(read(name)?.trim())
+}
+
+pub fn write_bytes(name: &str, bytes: &[u8]) {
+    // ponytail: a failed save only loses this copy; no error UI for it
+    let _ = write(name, &hex(bytes));
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+fn unhex(text: &str) -> Option<Vec<u8>> {
+    (0..text.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(text.get(i..i + 2)?, 16).ok())
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bytes_survive_as_hex() {
+        let bytes = [0, 1, 0x7f, 0x80, 0xff];
+        assert_eq!(hex(&bytes), "00017f80ff");
+        assert_eq!(unhex(&hex(&bytes)), Some(bytes.to_vec()));
+        assert_eq!(unhex(""), Some(vec![]));
+        assert_eq!(unhex("abc"), None, "odd length");
+        assert_eq!(unhex("zz"), None);
+    }
+}

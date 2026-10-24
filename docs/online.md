@@ -105,7 +105,7 @@ crates/
 │   └── src/
 │       ├── lib.rs            # VERSION, Mode, Setup, Input, Round, simulate()
 │       ├── test.rs, lava.rs  # today's engine.rs / lava.rs rules
-│       └── replay.rs         # bytes format v1; imports nothing else from the engine
+│       └── replay.rs         # bytes format v1; knows only `Input` (the mode is its text key)
 └── typepper-server/          # (dist = false, not released)
     ├── migrations/0001_init.sql
     └── src/
@@ -213,7 +213,7 @@ Three layers, each versioned for its own reason:
 
 - Varints are unsigned LEB128: 7 bits per byte, the top bit means "more".
 - `Δms`: milliseconds since the previous input (since the round start for the
-  first one). At most 28 bits.
+  first one). Any `u32`: the round's clock just can't pass 2³² ms.
 - `op`: `0` Backspace, `1` End, `n ≥ 2` the character `n − 2`. Printable
   ASCII stays one byte.
 - About 2.5 B per key: a 60 s blitz is ~1.5 KB.
@@ -421,8 +421,8 @@ Long-term rows: at most players × modes played × months, about 2 KB each.
 | 0 | **Move into `crates/`**: Trunk, cargo-release, dist, CI, README, release skill | `cargo test`, both clippies and `trunk build` pass; `dist plan` and `cargo release` dry-run match today | — |
 | 1 | **Server skeleton on Railway**: `/health` (checks Postgres), ssh `ping`, Dockerfile, `infra/railway`, `deploy-production.yml`, pins, DNS, `TYPEPPER_SSH_HOST_KEY`. The first migration comes with the first table, in phase 4 | `curl api.typepper.com/health` and `ssh -p PORT ssh.typepper.com ping` answer | 0 |
 | 2 | **Engine crate**: Mode refactor, `Round`, seeded RNG, fixed timestep, `libm`, `VERSION` | a bot round played live and its log run through `simulate` give the same outcome | 0 (parallel with 1) |
-| 3 | **Replay format, recording, outbox** (no network yet) | golden-bytes, round-trip and junk tests pass; the outbox fills offline | 2 |
-| 4 | **Share**: anonymous `v1 submit`, `/v1/runs/{id}`, share page, `online.rs`, web replay mode | a terminal round becomes a link that plays back in a browser | 1, 3 |
+| 3 | **Replay format, recording, watching** (no network yet): `engine::replay`, `Mode::key`/`parse`, the last round saved as `last.replay`, `typepper --replay [FILE]` | golden-bytes, round-trip and junk tests pass; a round and its replay end on the same results screen | 2 |
+| 4 | **Share**: anonymous `v1 submit`, `/v1/runs/{id}`, share page, `online.rs`, the outbox, web replay mode | a terminal round becomes a link that plays back in a browser | 1, 3 |
 | 5 | **Identity**: OAuth, sessions, `v1 link`, CORS and cookies | a linked key and a web login map to the same player | 4 |
 | 6 | **Leaderboards**: ranking in `submit`, boards, rank on the results screen, sweep | ranks show on the results screen; the sweep keeps exactly what boards need | 5 |
 

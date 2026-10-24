@@ -10,10 +10,12 @@ use std::time::Duration;
 use web_time::Instant;
 
 pub mod lava;
+pub mod replay;
 mod rng;
 mod test;
 
 pub use lava::Lava;
+pub use replay::Replay;
 pub use rng::Rng;
 pub use test::*;
 
@@ -78,6 +80,55 @@ impl Mode {
 
     pub fn leveled(self) -> bool {
         self.start_level().is_some()
+    }
+
+    /// Its stable name, for replays and the server's boards: `time:30`,
+    /// `words:25`, `zen`, `survival:4`, `lava:lock:4`, `pursuit:7`. Never
+    /// changes with menu labels (those are `best`'s keys).
+    pub fn key(self) -> String {
+        match self {
+            Mode::Time(s) => format!("time:{s}"),
+            Mode::Words(n) => format!("words:{n}"),
+            Mode::Zen => "zen".into(),
+            Mode::Survival { start_level } => format!("survival:{start_level}"),
+            Mode::Lava {
+                aim: Aim::Lock,
+                start_level,
+            } => format!("lava:lock:{start_level}"),
+            Mode::Lava {
+                aim: Aim::Free,
+                start_level,
+            } => format!("lava:free:{start_level}"),
+            Mode::Pursuit { start_level } => format!("pursuit:{start_level}"),
+        }
+    }
+
+    /// The mode a key names, if the game offers it (so a made-up level can't
+    /// start a board of its own).
+    pub fn parse(key: &str) -> Option<Mode> {
+        let level = |l: &str| l.parse().ok().filter(|l| LEVELS.contains(l));
+        let mode = match key.split(':').collect::<Vec<_>>()[..] {
+            ["time", s] => Mode::Time(s.parse().ok().filter(|s| [15, 30, 60].contains(s))?),
+            ["words", n] => Mode::Words(n.parse().ok().filter(|n| [10, 25, 50].contains(n))?),
+            ["zen"] => Mode::Zen,
+            ["survival", l] => Mode::Survival {
+                start_level: level(l)?,
+            },
+            ["lava", "lock", l] => Mode::Lava {
+                aim: Aim::Lock,
+                start_level: level(l)?,
+            },
+            ["lava", "free", l] => Mode::Lava {
+                aim: Aim::Free,
+                start_level: level(l)?,
+            },
+            ["pursuit", l] => Mode::Pursuit {
+                start_level: level(l)?,
+            },
+            _ => return None,
+        };
+        // one spelling per mode: "time:030" isn't "time:30"
+        (mode.key() == key).then_some(mode)
     }
 
     /// The same mode from level `level` (the rest have no levels).
@@ -261,6 +312,26 @@ impl Round {
     }
 }
 
+impl Replay {
+    /// The round so far, as a replay.
+    pub fn of(round: &Round) -> Replay {
+        Replay {
+            engine: VERSION,
+            mode: round.setup.mode.key(),
+            seed: round.setup.seed,
+            inputs: round.log.clone(),
+        }
+    }
+
+    /// What it starts from, if its mode is one the game offers.
+    pub fn setup(&self) -> Option<Setup> {
+        Some(Setup {
+            mode: Mode::parse(&self.mode)?,
+            seed: self.seed,
+        })
+    }
+}
+
 /// A finished round's numbers.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Outcome {
@@ -398,6 +469,75 @@ mod tests {
             );
             assert_eq!(got, want, "{mode:?}, seed {seed}");
         }
+    }
+
+    #[test]
+    fn mode_keys_name_every_mode_once() {
+        let mut keys = Vec::new();
+        for level in LEVELS {
+            for m in [
+                Mode::Survival { start_level: level },
+                Mode::Lava {
+                    aim: Aim::Lock,
+                    start_level: level,
+                },
+                Mode::Lava {
+                    aim: Aim::Free,
+                    start_level: level,
+                },
+                Mode::Pursuit { start_level: level },
+            ] {
+                keys.push((m, m.key()));
+            }
+        }
+        for m in [
+            Mode::Time(15),
+            Mode::Time(30),
+            Mode::Time(60),
+            Mode::Words(10),
+            Mode::Words(25),
+            Mode::Words(50),
+            Mode::Zen,
+        ] {
+            keys.push((m, m.key()));
+        }
+        for (m, k) in &keys {
+            assert_eq!(Mode::parse(k), Some(*m), "{k}");
+        }
+        assert_eq!(
+            Mode::Lava {
+                aim: Aim::Lock,
+                start_level: 4
+            }
+            .key(),
+            "lava:lock:4"
+        );
+        for junk in [
+            "",
+            "time",
+            "time:31",
+            "time:030",
+            "survival:3",
+            "pursuit:99",
+            "lava:4",
+            "zen:1",
+            "Zen",
+        ] {
+            assert_eq!(Mode::parse(junk), None, "{junk:?}");
+        }
+    }
+
+    #[test]
+    fn a_replay_plays_its_round_back() {
+        let live = play(Mode::Pursuit { start_level: 4 }, 9, &[16]);
+        let bytes = Replay::of(&live).encode();
+        let replay = Replay::decode(&bytes).unwrap();
+        assert_eq!(replay.setup(), Some(live.setup));
+        assert_eq!(
+            simulate(replay.setup().unwrap(), &replay.inputs),
+            live.result()
+        );
+        assert!(bytes.len() < live.log.len() * 3, "about 2 bytes an input");
     }
 
     #[test]

@@ -36,7 +36,19 @@ fn main() -> std::io::Result<()> {
     });
     let bot = autopilot.or(flag("--demo").then(Bot::tour));
     // --flawless: the bot never misses, so a run stays at reaper to watch its effects
-    let mut app = App::new(bot.map(|b| if flag("--flawless") { b.flawless() } else { b }));
+    // --replay [FILE]: watch a round (FILE, or the last one played here)
+    let watch = match args.iter().position(|a| a == "--replay") {
+        Some(i) => match load_replay(args.get(i + 1).filter(|a| !a.starts_with("--"))) {
+            Ok(w) => Some(w),
+            Err(why) => {
+                eprintln!("typepper: can't play that replay: {why}");
+                std::process::exit(1);
+            }
+        },
+        None => None,
+    };
+    let bot = bot.map(|b| if flag("--flawless") { b.flawless() } else { b });
+    let mut app = App::new(bot, watch);
     // --fps N: frame cap. ~120 by default; recordings use less, since a
     // recording terminal can't draw full-screen flames that fast (see demo/)
     let fps: f64 = args
@@ -95,6 +107,28 @@ fn main() -> std::io::Result<()> {
             app.tick(Instant::now());
         }
     })
+}
+
+/// The replay at `path`, or the last round played on this machine, checked
+/// against these rules.
+#[cfg(not(target_arch = "wasm32"))]
+fn load_replay(path: Option<&String>) -> Result<(engine::Setup, engine::Replay), String> {
+    let bytes = match path {
+        Some(p) => std::fs::read(p).map_err(|e| format!("{p}: {e}"))?,
+        None => store::read_bytes("last.replay").ok_or("no round played yet")?,
+    };
+    let replay = engine::Replay::decode(&bytes).map_err(|e| e.to_string())?;
+    if replay.engine != engine::VERSION {
+        return Err(format!(
+            "it was recorded by other rules (engine {}, these are {})",
+            replay.engine,
+            engine::VERSION
+        ));
+    }
+    let setup = replay
+        .setup()
+        .ok_or("its mode isn't one this typepper has")?;
+    Ok((setup, replay))
 }
 
 /// One `--script` step, "seconds:key" (a key name, or a single character).
@@ -172,7 +206,7 @@ fn start(font: &'static str) -> Result<(), Box<dyn std::error::Error>> {
             b
         }
     });
-    let app = Rc::new(RefCell::new(App::new(bot)));
+    let app = Rc::new(RefCell::new(App::new(bot, None)));
 
     // dynamic atlas rasterizes any glyph (blocks, faces, sparks) from the font stack
     let system = ["Menlo", "Consolas", "DejaVu Sans Mono", "monospace"];
