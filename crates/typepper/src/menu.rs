@@ -514,9 +514,11 @@ pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, now: Instant) {
     Line::from("a spicy little typing game".dark_gray())
         .centered()
         .render(tag, f.buffer_mut());
-    // the release this is (the server says its own in /health), padded so
-    // the scenery keeps a little distance from it
-    Line::from(format!("  v{}  ", env!("CARGO_PKG_VERSION")).dark_gray())
+    // the release this is (the server says its own in /health): a step
+    // fainter than the tagline's dark gray (120; light mode flips grays, so
+    // it's fainter there too), padded so the scenery keeps its distance
+    let faint = Color::Rgb(88, 88, 88);
+    Line::from(format!("  v{}  ", env!("CARGO_PKG_VERSION")).fg(faint))
         .centered()
         .render(version, f.buffer_mut());
 
