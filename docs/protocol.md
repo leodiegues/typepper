@@ -1,0 +1,181 @@
+# Protocol
+
+What the game and the server say to each other. The terminal game talks over
+**SSH** (it runs the system `ssh`); the web game over **HTTPS**. Both carry
+the same requests and the same one-line answers, so the game parses them the
+same way whichever way they came.
+
+## Versioning
+
+| Layer | Version | Changes when |
+|---|---|---|
+| commands | `v1` (SSH), `/v1` (HTTP) | a request or an answer changes shape |
+| replay bytes | `format` | the byte layout changes ([replays](replays.md)) |
+| rules | `engine` | results would change ([engine](engine.md)) |
+
+Released games keep calling what they were built with, so a `v1` command
+never changes meaning: a different shape gets `v2`, next to it. `/health`,
+share pages and `ping` are unversioned: they're for Railway, for people, and
+for checking the door is open.
+
+## Commands
+
+| SSH (`ssh -p 36080 -l typepper ssh.typepper.com …`) | HTTP (`https://api.typepper.com`) | Does |
+|---|---|---|
+| `v1 submit`, submission on stdin | `POST /v1/runs`, submission as the body | plays and stores each replay; ranks it if the caller is a linked player |
+| `v1 board <mode> <period>` | `GET /v1/boards/{mode}?period=<period>` | a leaderboard |
+| `v1 whoami` | | `ok <login>`, or `ok anonymous` |
+| `ssh -l <github-login> … v1 link` | | links the key that logged in to that GitHub account |
+| `v1 unlink` | | lets go of the key that logged in |
+| | `GET /v1/runs/{id}` | a stored replay's bytes |
+| | `GET https://r.typepper.com/{id}` | a run's share page |
+| `ping` | `GET /health` | `pong`; readiness |
+
+The SSH user matters: **`typepper`** is the game, and any other user is a
+GitHub login asking to link (see [server](server.md#accounts-and-linking)).
+Anything else over SSH answers `err unknown-command <it>` with exit status 1;
+a plain `ssh` without a command prints that there's no shell and exits.
+
+## Submitting
+
+### The submission
+
+```text
+submission = item × 1..20                       back to back: the outbox in one go
+item       = claimed: f64 LE (8 bytes) | replay
+```
+
+- No length prefix: a replay ends where its `count` inputs end.
+- `claimed` is the client's own score (`NaN` for none). It's stored next to
+  the server's and logged when they differ; it's never believed.
+- At most 20 items, each replay at most 1 MiB.
+
+```sh
+# one replay, by hand (bash): NaN as the claim, then the bytes
+{ printf '\x00\x00\x00\x00\x00\x00\xf8\x7f'; cat run.replay; } \
+  | ssh -p 36080 -l typepper ssh.typepper.com v1 submit
+curl --data-binary @submission.bin https://api.typepper.com/v1/runs
+```
+
+### The answer
+
+One line per item, in order:
+
+```text
+ok <id> <score> <rank> <link>
+err <code> <why>
+```
+
+```text
+ok 7Xf9qyuC 108 - https://r.typepper.com/7Xf9qyuC         anonymous: no rank
+ok nEGsHePP 0 3 https://r.typepper.com/nEGsHePP           a linked player: #3 all time on that mode
+err old-engine update typepper to submit
+err bad-replay truncated
+```
+
+- **`<score>`** is the server's (`-` in zen). **`<rank>`** is the player's
+  place on the mode's all-time board after this run (`-` when anonymous or
+  zen).
+- A broken item ends the answer: with its bytes unreadable there's no telling
+  where the next one starts.
+
+| Code | Means | The game's outbox |
+|---|---|---|
+| `old-engine` | recorded by other rules than the server's | drops it |
+| `bad-replay` | unreadable, a mode the game doesn't offer, or a round that never ends | drops it |
+| `too-big` | a replay over 1 MiB, or more than a submission over SSH | drops it |
+| `too-many` | past the 20th item | keeps it |
+| `busy` | the server couldn't store it right now | keeps it |
+| `rate-limited` | over the caller's hourly allowance; the whole submission | keeps it |
+| no answer | the network, a timeout, the server down | keeps everything |
+
+Over HTTP, `rate-limited` comes with status 429; everything else is 200, with
+the outcome in the lines.
+
+## Boards
+
+```text
+v1 board time:30 week                      GET /v1/boards/time:30?period=week
+```
+
+- **`<mode>`**: a `Mode::key` (`time:30`, `pursuit:7`, …).
+- **`<period>`**: `day`, `week`, `month`, `year` or `all`. Periods are UTC
+  calendar spans; weeks start on Monday.
+- **The answer**: the top 20, one line each, then, over SSH for a linked
+  caller who's below the top, their own row:
+
+```text
+1 131 leodiegues 2026-10-23
+2 118 y0sif 2026-10-21
+3 108 OctoTest 2026-10-24
+me 31 61 someone 2026-10-20
+```
+
+`<rank> <score> <login> <day>`; ties share a rank and go to whoever got there
+first. An empty board is no lines. A bad mode or period:
+`err bad-board …` (404 over HTTP). HTTP boards may be 30 s old.
+
+## Linking
+
+```text
+ssh -p 36080 -l <github-login> ssh.typepper.com v1 link
+ok linked <Login>                  (as GitHub spells it)
+```
+
+The SSH login only gets in with a key listed on
+`github.com/<github-login>.keys`; otherwise ssh reports `Permission denied`.
+`typepper link <login>` runs this for you. After linking, `v1 whoami` as
+`typepper` with that key answers `ok <login>`, and its submissions are that
+player's. `v1 unlink` answers `ok unlinked` (or `ok not-linked`).
+
+## Replays and share pages
+
+- **`GET /v1/runs/{id}`**: `application/octet-stream`, the replay as
+  submitted; cacheable for a week (`immutable`: a run never changes). 404 for
+  unknown or expired ids.
+- **`GET r.typepper.com/{id}`**: HTML with link-preview tags (`og:title`
+  like `108 wpm · BLITZ 15s · typepper`), then a refresh to
+  `https://typepper.com/?replay={id}`. Gone runs get a short page that says so.
+
+Ids are 8 base62 characters (`[0-9A-Za-z]`).
+
+## Health
+
+`GET /health` is readiness: **200** once Postgres answers, **503** when it
+doesn't (within 3 s). Railway only switches traffic to a new deploy once it's
+200. The body follows the IETF health check draft (`application/health+json`),
+so its field names are the draft's camelCase:
+
+```json
+{
+  "status": "pass",
+  "version": "1",
+  "releaseId": "0.4.0",
+  "serviceId": "typepper-server",
+  "description": "deployment c5856d37",
+  "checks": {
+    "postgres:responseTime": [
+      { "componentType": "datastore", "status": "pass", "observedValue": 5, "observedUnit": "ms" }
+    ]
+  }
+}
+```
+
+`version` is the API's, `releaseId` the server's (the release). Failures
+never say why; that goes to the logs. JSON we design ourselves will be
+snake_case.
+
+## Browsers
+
+The web game calls `api.typepper.com` from `typepper.com`. CORS allows
+`https://typepper.com` and local `http://localhost:*` / `http://127.0.0.1:*`
+origins (for `trunk serve`), for `GET` and `POST` with a `content-type`
+header. No cookies yet: the web is anonymous until web login exists.
+
+## Limits
+
+- 20 replays a submission, 1 MiB each; a mode key of at most 32 bytes.
+- **60 submissions an hour per caller**: an ssh key's fingerprint, else the
+  connection's address (HTTP: the first `x-forwarded-for` address).
+- An SSH session idle for 30 s is closed; the game gives up on a call after
+  20 s.

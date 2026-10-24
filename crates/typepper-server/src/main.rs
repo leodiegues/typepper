@@ -1,5 +1,5 @@
 //! typepper's server: the HTTP API and the SSH door, over one Postgres.
-//! See docs/online.md.
+//! See docs/server.md.
 
 mod accounts;
 mod board;
@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host_key = russh::keys::PrivateKey::from_openssh(var("TYPEPPER_SSH_HOST_KEY")?)?;
     migrate(&db).await?;
     let quota = Arc::new(runs::Quota::default());
-    // hourly: forget runs no board needs (docs/online.md, "Sweep")
+    // hourly: forget runs no board needs (docs/server.md, "The sweep")
     tokio::spawn({
         let db = db.clone();
         async move {

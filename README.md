@@ -73,6 +73,12 @@ Thank you to the Ratatui team and community.
 - [cargo-dist](https://github.com/axodotdev/cargo-dist) builds the releases and installers; [Trunk](https://github.com/trunk-rs/trunk) builds the web version
 - [Departure Mono](https://departuremono.com) by Helena Zhang: the pixel font of the web game and the recordings
 
+## Contributing
+
+Ideas, bugs and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md)
+for setting up and running everything, and [docs/](docs/README.md) for how
+typepper is built.
+
 ## License
 
 typepper is free software: you can redistribute it and/or modify it under
