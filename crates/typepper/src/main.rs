@@ -1,5 +1,6 @@
 mod app;
 mod best;
+mod boards;
 mod fx;
 mod lava;
 mod menu;

@@ -520,7 +520,14 @@ pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, now: Instant) {
     // padded so the scenery keeps a little distance from the text
     let hint = match crate::settings::touch() {
         true => "  swipe ←/→ mode · ↑/↓ length · tap to play  ".to_string(),
-        false => format!("  ←/→ mode · ↑/↓ length · enter play · s settings{QUIT}  "),
+        false => {
+            let boards = if crate::settings::offline() {
+                ""
+            } else {
+                " · b boards"
+            };
+            format!("  ←/→ mode · ↑/↓ length · enter play{boards} · s settings{QUIT}  ")
+        }
     };
     Line::from(hint.dark_gray())
         .centered()

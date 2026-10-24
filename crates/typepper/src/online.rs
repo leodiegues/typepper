@@ -26,10 +26,56 @@ pub fn submission(replay: &[u8], claimed: Option<f64>) -> Vec<u8> {
 pub fn answer(line: &str) -> Result<String, String> {
     let words: Vec<&str> = line.trim().split(' ').collect();
     match words[..] {
-        ["ok", _id, _score, _rank, link] => Ok(link.trim_start_matches("https://").to_string()),
+        ["ok", _id, _score, rank, link] => {
+            let link = link.trim_start_matches("https://");
+            Ok(match rank {
+                "-" => link.to_string(),
+                rank => format!("{link} · #{rank} all time"),
+            })
+        }
         ["err", _code, ..] => Err(words[2..].join(" ")),
         _ => Err("typepper.com didn't answer".into()),
     }
+}
+
+/// One row of a board.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Row {
+    pub rank: u32,
+    pub score: f64,
+    pub login: String,
+    /// `YYYY-MM-DD`, UTC.
+    pub day: String,
+    /// The player's own row, below the top.
+    pub me: bool,
+}
+
+/// A board's text (`<rank> <score> <login> <day>` lines, then `me …`).
+pub fn rows(text: &str) -> Result<Vec<Row>, String> {
+    if let Some(why) = text.strip_prefix("err ") {
+        return Err(why
+            .split_once(' ')
+            .map_or(why, |(_, w)| w)
+            .trim()
+            .to_string());
+    }
+    Ok(text
+        .lines()
+        .filter_map(|l| {
+            let (me, l) = match l.strip_prefix("me ") {
+                Some(l) => (true, l),
+                None => (false, l),
+            };
+            let w: Vec<&str> = l.split(' ').collect();
+            Some(Row {
+                rank: w.first()?.parse().ok()?,
+                score: w.get(1)?.parse().ok()?,
+                login: w.get(2)?.to_string(),
+                day: w.get(3)?.to_string(),
+                me,
+            })
+        })
+        .collect())
 }
 
 /// Whether one line of an answer settles its replay: stored, or never will
@@ -60,16 +106,16 @@ mod imp {
         Some(login.trim().to_string()).filter(|l| !l.is_empty())
     }
 
-    /// An ssh upload under way.
-    pub struct Upload {
+    /// A call to the server under way (a submission, or a board).
+    pub struct Call {
         child: Child,
         started: Instant,
     }
 
-    impl Upload {
+    impl Call {
         /// Sends `body` (a submission) as the linked player when there is
         /// one, else anonymously.
-        pub fn start(body: Vec<u8>) -> Result<Upload, String> {
+        pub fn submit(body: Vec<u8>) -> Result<Call, String> {
             // anonymous: no key offered (an agent could ask its owner to
             // approve one). Linked: keys are offered, the server takes only
             // the linked one, and a locked key goes to an askpass that isn't
@@ -90,7 +136,27 @@ mod imp {
             std::thread::spawn(move || {
                 let _ = stdin.write_all(&body);
             });
-            Ok(Upload {
+            Ok(Call {
+                child,
+                started: Instant::now(),
+            })
+        }
+
+        /// `mode`'s board for `period` (with the player's own row, if linked).
+        pub fn board(mode: &str, period: &str) -> Result<Call, String> {
+            let pubkey = match account() {
+                Some(_) => "PubkeyAuthentication=yes",
+                None => "PubkeyAuthentication=no",
+            };
+            let child = ssh(GAME_USER, &["-o", pubkey], &["v1", "board", mode, period])?
+                .env("SSH_ASKPASS", "typepper-asks-no-passphrases")
+                .env("SSH_ASKPASS_REQUIRE", "force")
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|_| "ssh isn't installed".to_string())?;
+            Ok(Call {
                 child,
                 started: Instant::now(),
             })
@@ -235,10 +301,10 @@ mod imp {
     type Slot = Rc<RefCell<Option<Result<String, String>>>>;
 
     /// A fetch under way.
-    pub struct Upload(Slot);
+    pub struct Call(Slot);
 
-    impl Upload {
-        pub fn start(body: Vec<u8>) -> Result<Upload, String> {
+    impl Call {
+        pub fn submit(body: Vec<u8>) -> Result<Call, String> {
             let slot = Slot::default();
             let done = slot.clone();
             wasm_bindgen_futures::spawn_local(async move {
@@ -249,12 +315,34 @@ mod imp {
                 }
                 *done.borrow_mut() = Some(answer);
             });
-            Ok(Upload(slot))
+            Ok(Call(slot))
+        }
+
+        pub fn board(mode: &str, period: &str) -> Result<Call, String> {
+            let slot = Slot::default();
+            let done = slot.clone();
+            let url = format!("{}/v1/boards/{mode}?period={period}", api());
+            wasm_bindgen_futures::spawn_local(async move {
+                *done.borrow_mut() = Some(get_text(&url).await);
+            });
+            Ok(Call(slot))
         }
 
         pub fn poll(&mut self) -> Option<Result<String, String>> {
             self.0.borrow_mut().take()
         }
+    }
+
+    async fn get_text(url: &str) -> Result<String, String> {
+        let window = web_sys::window().ok_or("no window")?;
+        let response = JsFuture::from(window.fetch_with_str(url))
+            .await
+            .map_err(|_| "couldn't reach typepper.com".to_string())?;
+        let response: web_sys::Response = response.into();
+        let text = JsFuture::from(response.text().map_err(|_| "no answer")?)
+            .await
+            .map_err(|_| "no answer".to_string())?;
+        text.as_string().ok_or("no answer".into())
     }
 
     async fn post(body: Vec<u8>) -> Result<String, String> {
@@ -328,6 +416,29 @@ pub use imp::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn boards_read_their_rows() {
+        let text =
+            "1 112 leodiegues 2026-10-24\n2 98.5 y0sif 2026-10-23\nme 14 61 OctoTest 2026-10-20\n";
+        let rows = rows(text).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(
+            (rows[0].rank, rows[0].score, rows[0].login.as_str()),
+            (1, 112.0, "leodiegues")
+        );
+        assert!(rows[2].me && rows[2].rank == 14);
+        assert_eq!(super::rows(""), Ok(vec![]), "an empty board");
+        assert_eq!(
+            super::rows("err bad-board no such mode\n"),
+            Err("no such mode".into())
+        );
+        let saved = "ok x7Kp2QaZ 112 14 https://r.typepper.com/x7Kp2QaZ";
+        assert_eq!(
+            answer(saved),
+            Ok("r.typepper.com/x7Kp2QaZ · #14 all time".into())
+        );
+    }
 
     #[test]
     fn only_final_answers_empty_the_outbox() {

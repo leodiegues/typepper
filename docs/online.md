@@ -256,7 +256,7 @@ client's own score, kept only to log runs the server scores differently.
 | `v1 submit`, submission on stdin | `POST api.typepper.com/v1/runs` | stores every run, returns a link; ranks it if the caller is known |
 | `-l <github-login> … v1 link` | `/auth/github` → `/auth/callback` (later) | ties this ssh key / browser to a player |
 | `v1 whoami`, `v1 unlink` | | the player this key is, or anonymous; let the key go |
-| `v1 board <mode> <period>` | `GET /v1/boards/{mode}?period=` | `day`, `week`, `month`, `year`, `all` |
+| `v1 board <mode> <period>` | `GET /v1/boards/{mode}?period=` | `day`, `week`, `month`, `year`, `all`: the top 20 as `<rank> <score> <login> <day>` lines; over SSH, a linked caller below the top gets a last `me …` line |
 | | `GET /v1/runs/{id}` | replay bytes, for the web player |
 | `ping` | `GET /health` | readiness: 200 `pass` once Postgres answers, else 503 `fail`; body in the IETF health check format (`application/health+json`: `releaseId`, deployment, Postgres timing) |
 | | `GET r.typepper.com/{id}` | OG tags, then redirect to `typepper.com/?replay={id}` |
@@ -361,8 +361,12 @@ create index runs_age    on runs (created_at);
 
 ### Boards
 
-Calendar periods in UTC (weeks start Monday, `date_trunc('week')`), shown with
-"resets in …". Only the current day / week / month / year is browsable; past
+Calendar periods in UTC (weeks start Monday, `date_trunc('week', now(), 'UTC')`:
+the time zone is explicit, whatever the session's), shown with "resets in …".
+In the game, `b` on the menu opens the board of the selected card's mode (and
+starting level): ←/→ for today, this week, this month, this year and all time,
+the player's own row highlighted (and shown under the top 20 when it's lower).
+Opening it is the only network call the screen makes. Only the current day / week / month / year is browsable; past
 months' bests are kept, so `?period=month&at=2026-09` can come later.
 
 ```sql
@@ -370,7 +374,7 @@ select * from (
   select distinct on (player_id) id, player_id, score, created_at
   from runs
   where mode = $1 and player_id is not null and score is not null
-    and ($2::text = 'all' or created_at >= date_trunc($2, now()))
+    and ($2::text = 'all' or created_at >= date_trunc($2, now(), 'UTC'))
   order by player_id, score desc, created_at
 ) best order by score desc, created_at limit 50;
 ```
@@ -388,10 +392,10 @@ calendar month (which also covers year and all-time).
 delete from runs
 where created_at < now() - interval '8 days'
   and id not in (
-    select distinct on (player_id, mode, date_trunc('month', created_at)) id
+    select distinct on (player_id, mode, date_trunc('month', created_at, 'UTC')) id
     from runs
     where player_id is not null and score is not null
-    order by player_id, mode, date_trunc('month', created_at), score desc, created_at
+    order by player_id, mode, date_trunc('month', created_at, 'UTC'), score desc, created_at
   );
 ```
 
@@ -440,7 +444,7 @@ Long-term rows: at most players × modes played × months, about 2 KB each.
 | 3 | **Replay format, recording, watching** (no network yet): `engine::replay`, `Mode::key`/`parse`, the last round saved as `last.replay`, `typepper --replay [FILE]` | golden-bytes, round-trip and junk tests pass; a round and its replay end on the same results screen | 2 |
 | 4 | **Share**: anonymous `v1 submit` (SSH and HTTP), the `runs` table, `/v1/runs/{id}`, share page, `online.rs`, `u share`, web replay mode, the online setting | a terminal round becomes a link that plays back in a browser | 1, 3 |
 | 5 | **Identity, terminal first**: `players`/`ssh_keys` (migration 0002), `v1 link`/`whoami`/`unlink`, `typepper link`/`unlink`, the outbox. Web login (OAuth, sessions, cookies) once the OAuth app exists | a linked key's rounds go up as its player, offline rounds go up later | 4 |
-| 6 | **Leaderboards**: ranking in `submit`, boards, rank on the results screen, sweep | ranks show on the results screen; the sweep keeps exactly what boards need | 5 |
+| 6 | **Leaderboards**: indexes (migration 0003), ranks in `submit`, `v1 board` / `GET /v1/boards`, the hourly sweep, the in-game boards screen (`b` on the menu), the rank on the results screen | ranks show on the results screen and the boards; the sweep keeps exactly what boards need | 5 |
 
 ## Checks left behind
 

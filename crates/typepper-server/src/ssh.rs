@@ -12,7 +12,7 @@ use russh::{Channel, ChannelId};
 use sqlx::PgPool;
 
 use crate::runs::{self, Quota};
-use crate::{accounts, github};
+use crate::{accounts, board, github};
 
 /// The user the game logs in as. Any other user is a GitHub login, linking a
 /// key to that account (`ssh -l <login> … v1 link`).
@@ -196,6 +196,7 @@ impl Handler for Door {
                 None => ("ok anonymous\n".into(), 0),
             },
             b"v1 unlink" => self.unlink().await,
+            c if c.starts_with(b"v1 board ") => self.board(c).await,
             _ => run(command),
         };
         reply(channel, out, status, session)
@@ -267,6 +268,31 @@ impl Door {
             Ok(login) => (format!("ok linked {login}\n"), 0),
             Err(e) => {
                 eprintln!("ssh: link: {e}");
+                ("err busy try later\n".into(), 1)
+            }
+        }
+    }
+
+    /// `v1 board <mode> <period>`: the board, and the caller's own row.
+    async fn board(&self, command: &[u8]) -> (String, u32) {
+        let words: Vec<&str> = std::str::from_utf8(command)
+            .unwrap_or("")
+            .split(' ')
+            .collect();
+        let (Some(mode), Some(period)) = (
+            words.get(2).and_then(|m| typepper_engine::Mode::parse(m)),
+            words.get(3).and_then(|p| board::Period::parse(p)),
+        ) else {
+            return (
+                "err bad-board v1 board <mode> <day|week|month|year|all>\n".into(),
+                1,
+            );
+        };
+        let me = self.player().map(|(id, _)| id);
+        match board::board(&self.db, mode, period, me).await {
+            Ok((top, mine)) => (board::text(&top, mine.as_ref()), 0),
+            Err(e) => {
+                eprintln!("ssh: board: {e}");
                 ("err busy try later\n".into(), 1)
             }
         }

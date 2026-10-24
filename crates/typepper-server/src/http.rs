@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use axum::Router;
 use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Path, State};
+use axum::extract::{DefaultBodyLimit, Path, RawQuery, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
+use crate::board::{self, Period};
 use crate::id::Id;
 use crate::runs::{self, Quota};
 
@@ -38,6 +39,7 @@ pub async fn serve(db: PgPool, quota: Arc<Quota>, port: u16) -> std::io::Result<
         .route("/health", get(health))
         .route("/v1/runs", post(submit))
         .route("/v1/runs/{id}", get(replay))
+        .route("/v1/boards/{mode}", get(boards))
         .route("/{id}", get(page))
         .layer(DefaultBodyLimit::max(runs::MAX_BODY))
         .layer(cors)
@@ -64,6 +66,43 @@ async fn submit(State(cx): State<Ctx>, headers: HeaderMap, body: Bytes) -> Respo
     // anonymous until accounts arrive
     let lines = runs::submit(&cx.db, None, &body).await;
     ([(CONTENT_TYPE, "text/plain; charset=utf-8")], lines).into_response()
+}
+
+/// `GET /v1/boards/{mode}?period=day|week|month|year|all`: a board, one
+/// line per row (as `v1 board` over SSH).
+async fn boards(
+    State(cx): State<Ctx>,
+    Path(mode): Path<String>,
+    RawQuery(q): RawQuery,
+) -> Response {
+    let period = q
+        .as_deref()
+        .unwrap_or("")
+        .split('&')
+        .find_map(|kv| kv.strip_prefix("period="))
+        .unwrap_or("all");
+    let (Some(mode), Some(period)) = (typepper_engine::Mode::parse(&mode), Period::parse(period))
+    else {
+        return (
+            StatusCode::NOT_FOUND,
+            "err bad-board no such mode or period\n",
+        )
+            .into_response();
+    };
+    match board::board(&cx.db, mode, period, None).await {
+        Ok((top, _)) => (
+            [
+                (CONTENT_TYPE, "text/plain; charset=utf-8"),
+                (CACHE_CONTROL, "public, max-age=30"),
+            ],
+            board::text(&top, None),
+        )
+            .into_response(),
+        Err(e) => {
+            eprintln!("boards: {e}");
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    }
 }
 
 /// `GET /v1/runs/{id}`: the replay, for the web player. Never changes.

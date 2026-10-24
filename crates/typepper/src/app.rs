@@ -11,10 +11,11 @@ use ratatui::text::Line;
 use web_time::Instant;
 
 use crate::best::{Bests, Outcome};
+use crate::boards::{self, Boards};
 use crate::engine::{Game, Input, LEVELS, Mode, Replay, Round, Setup, Test};
 use crate::lava;
 use crate::menu::{self, Dialog, Menu, Pick};
-use crate::online::{self, Upload};
+use crate::online::{self, Call};
 use crate::settings::{ROWS, Settings, touch};
 use crate::ui;
 
@@ -37,6 +38,7 @@ enum Screen {
     Title,
     Play(Round),
     Watch(Watch),
+    Boards(Boards),
 }
 
 /// Rounds going up: a shared one (anonymous), or a linked player's outbox.
@@ -48,7 +50,7 @@ struct Share {
     /// The outbox entries it carries (none: an anonymous share).
     outbox: Vec<String>,
     /// Under way, or how it went for this round: its link, or why not.
-    state: Result<Upload, Result<String, String>>,
+    state: Result<Call, Result<String, String>>,
 }
 
 /// A replay playing back: its inputs land on a fresh round as their time comes.
@@ -64,7 +66,7 @@ impl Screen {
         match self {
             Screen::Play(r) => Some(r),
             Screen::Watch(w) => Some(&w.round),
-            Screen::Title => None,
+            Screen::Title | Screen::Boards(_) => None,
         }
     }
 
@@ -231,6 +233,15 @@ impl App {
             (Screen::Title, Key::Up) => self.menu.length(-1, now),
             (Screen::Title, Key::Down) => self.menu.length(1, now),
             (Screen::Title, Key::Enter | Key::Char(' ')) => self.menu.press(now),
+            // the boards of the card's mode (from its starting level)
+            (Screen::Title, Key::Char('b')) if !self.settings.offline => {
+                let mode = self.menu.mode();
+                let mode = mode.from_level(LEVELS[self.menu.start_of(mode)]);
+                next = Some(Screen::Boards(Boards::open(mode)));
+            }
+            (Screen::Boards(b), Key::Left) => b.step(-1),
+            (Screen::Boards(b), Key::Right) => b.step(1),
+            (Screen::Boards(_), _) => {}
             (Screen::Title, _) => {}
             (Screen::Play(r), key) => match key {
                 Key::Backspace => r.input(r.ms(now), Input::Backspace),
@@ -283,6 +294,7 @@ impl App {
                 }
             }
             Screen::Title => {}
+            Screen::Boards(b) => b.tick(),
             Screen::Watch(w) => {
                 let ms = w.round.ms(now);
                 while let Some(&(at, input)) = w.inputs.get(w.next).filter(|(at, _)| *at <= ms) {
@@ -352,6 +364,7 @@ impl App {
                     menu::dialog(f, d, &self.settings, now);
                 }
             }
+            Screen::Boards(b) => boards::draw(f, b, self.account.as_deref(), now),
             Screen::Play(r) | Screen::Watch(Watch { round: r, .. }) => match &r.game {
                 Game::Lava(l) if l.test.finished.is_none() => lava::draw(f, l, now),
                 _ => ui::draw(f, r.test(), self.outcome, self.share_hint().as_deref()),
@@ -395,7 +408,7 @@ impl App {
         self.share = Some(Share {
             screen: self.screens,
             outbox,
-            state: Upload::start(body).map_err(Err),
+            state: Call::submit(body).map_err(Err),
         });
     }
 

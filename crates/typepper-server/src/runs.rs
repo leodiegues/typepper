@@ -15,6 +15,7 @@ use sqlx::{PgPool, Row};
 use typepper_engine::replay::{self, Bad};
 use typepper_engine::{Mode, Replay, VERSION, simulate};
 
+use crate::board;
 use crate::id::{Id, with_new_id};
 
 /// Replays in one submission (the game's outbox holds 20).
@@ -111,7 +112,13 @@ async fn one(
         "err busy try later".to_string()
     })?;
     let score = outcome.score.map_or("-".into(), |s| s.to_string());
-    Ok(format!("ok {id} {score} - {SHARE}/{id}"))
+    // a player's run: where they stand on the mode's all-time board now
+    let rank = match (player, outcome.score) {
+        (Some(p), Some(_)) => board::rank(db, setup.mode, p).await.ok().flatten(),
+        _ => None,
+    };
+    let rank = rank.map_or("-".into(), |r| r.to_string());
+    Ok(format!("ok {id} {score} {rank} {SHARE}/{id}"))
 }
 
 /// A stored replay's bytes.

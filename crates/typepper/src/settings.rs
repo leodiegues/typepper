@@ -16,6 +16,13 @@ pub fn calm() -> bool {
 }
 
 /// Played by touch (a phone in the browser): hints talk about taps, not keys.
+static OFFLINE: AtomicBool = AtomicBool::new(false);
+
+/// settings → online: off (no sharing, no boards, no hints about them).
+pub fn offline() -> bool {
+    OFFLINE.load(Ordering::Relaxed)
+}
+
 static TOUCH: AtomicBool = AtomicBool::new(false);
 
 pub fn touch() -> bool {
@@ -104,6 +111,7 @@ impl Settings {
     pub fn apply(&self, detected: bool) {
         theme::set_light(self.light.unwrap_or(detected));
         CALM.store(self.calm, Ordering::Relaxed);
+        OFFLINE.store(self.offline, Ordering::Relaxed);
     }
 
     pub fn value(&self, row: Row) -> &'static str {

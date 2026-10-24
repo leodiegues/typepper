@@ -2,6 +2,7 @@
 //! See docs/online.md.
 
 mod accounts;
+mod board;
 mod github;
 mod http;
 mod id;
@@ -31,6 +32,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host_key = russh::keys::PrivateKey::from_openssh(var("TYPEPPER_SSH_HOST_KEY")?)?;
     migrate(&db).await?;
     let quota = Arc::new(runs::Quota::default());
+    // hourly: forget runs no board needs (docs/online.md, "Sweep")
+    tokio::spawn({
+        let db = db.clone();
+        async move {
+            let mut hourly = tokio::time::interval(Duration::from_secs(3600));
+            loop {
+                hourly.tick().await;
+                match board::sweep(&db).await {
+                    Ok(0) => {}
+                    Ok(n) => eprintln!("sweep: forgot {n} runs"),
+                    Err(e) => eprintln!("sweep: {e}"),
+                }
+            }
+        }
+    });
     tokio::try_join!(
         http::serve(db.clone(), quota.clone(), port("PORT", 8080)),
         ssh::serve(host_key, db, quota, port("TYPEPPER_SSH_PORT", 2222)),
