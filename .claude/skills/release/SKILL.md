@@ -8,7 +8,9 @@ description: Cut a typepper release end to end — check main is releasable, pic
 A `vX.Y.Z` tag drives everything. Pushing it starts `release.yml` (cargo-dist:
 binaries for 5 platforms plus the shell/PowerShell installers, published as a
 GitHub Release whose notes come from that version's `CHANGELOG.md` section)
-and `pages.yml` (deploys the web game to https://typepper.com). `cargo release`
+`pages.yml` (deploys the web game to https://typepper.com) and
+`deploy-production.yml` (deploys typepper-server to Railway, behind
+api.typepper.com and ssh.typepper.com). `cargo release`
 makes the tag (config in `crates/typepper/release.toml`). Your part is the judgment around it,
 the version and the notes, and confirming it all landed.
 
@@ -44,7 +46,9 @@ unclear. typepper is pre-1.0:
 
 If nothing player-visible changed, say so and suggest not releasing. A
 site-only fix can go out with a manual run of the pages workflow instead
-(`gh workflow run pages.yml --ref main`).
+(`gh workflow run pages.yml --ref main`). The server only deploys from tags too: to
+redeploy one (say, after an infra change), run
+`gh workflow run deploy-production.yml --ref vX.Y.Z`.
 
 ## 3. Write the notes
 
@@ -89,8 +93,10 @@ gh run list --limit 5 --json databaseId,name,headBranch,status
 gh run watch <id> --exit-status
 ```
 
-Expect `release` (about 10 minutes, mostly the macOS and Windows builds) and
-`pages` for the tag, and `ci` for `main`. On a failure, read
+Expect `release` (about 10 minutes, mostly the macOS and Windows builds),
+`pages` and `deploy-production` for the tag, and `ci` for `main`. The deploy
+is detached: green means Railway took the commit, so also check that
+`curl -s https://api.typepper.com/health` reports the new `releaseId`. On a failure, read
 `gh run view <id> --log-failed` and report what broke. Don't retag.
 
 ## 6. Verify

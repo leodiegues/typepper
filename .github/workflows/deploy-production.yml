@@ -1,20 +1,14 @@
-# Deploys typepper-server to Railway: applies infra/railway/railway.ts, then
-# uploads this commit for Railway to build (infra/docker). Detached: green
-# means Railway took the commit; it switches traffic once /health answers, and
-# a failed build or health check leaves the previous deploy serving.
+# Deploys typepper-server to Railway with each release, like the site: a
+# vX.Y.Z tag applies infra/railway/railway.ts, then uploads the tagged commit
+# for Railway to build (infra/docker). Detached: green means Railway took the
+# commit; it switches traffic once /health answers, and a failed build or
+# health check leaves the previous deploy serving.
 name: deploy-production
 
 on:
   push:
-    branches: [main]
-    paths:
-      - crates/typepper-server/**
-      - crates/typepper-engine/**
-      - Cargo.toml
-      - Cargo.lock
-      - rust-toolchain.toml
-      - infra/**
-      - .github/workflows/deploy-production.yml
+    tags: ["v*"]
+  # server-only fixes: Actions → deploy-production → Run workflow (pick a tag)
   workflow_dispatch:
 
 permissions:

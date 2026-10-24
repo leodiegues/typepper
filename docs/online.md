@@ -52,7 +52,7 @@ protecting (around phase 5): a `ctx.environment` branch in `railway.ts`, a
 
 ```mermaid
 flowchart LR
-  P["push to main<br/>(server, engine, Cargo.lock, infra/ changed)"] --> C["check: clippy + test"]
+  P["release tag vX.Y.Z<br/>(with the binaries and the site)"] --> C["check: clippy + test"]
   C --> D["deploy<br/>mise run infra:apply -- --yes<br/>mise run infra:deploy"]
   D -. "uploads this commit,<br/>returns at once" .-> RB
   subgraph railway["Railway"]
@@ -62,7 +62,9 @@ flowchart LR
   end
 ```
 
-- `.github/workflows/deploy-production.yml` deploys; Railway builds the image
+- `.github/workflows/deploy-production.yml` deploys on each release tag, like
+  the site, so the server always runs the release the game shipped with (a
+  manual run deploys a chosen tag, for server-only fixes); Railway builds the image
   itself (no registry). The service has no GitHub source in `railway.ts`, so
   Railway never deploys on its own.
 - The deploy is detached: green CI means Railway accepted the upload. A failed
