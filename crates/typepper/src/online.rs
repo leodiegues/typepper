@@ -197,8 +197,11 @@ mod imp {
                 store::write("account", login).map_err(|e| e.to_string())?;
                 Ok(login.to_string())
             }
+            // ssh says why just above; it exits the same whether it couldn't
+            // connect or wasn't let in, so name both
             None if line.is_empty() => Err(format!(
-                "none of your ssh keys is on github.com/{login}.keys (add one in GitHub's settings)"
+                "ssh didn't get in (see above): either typepper.com is unreachable, \
+                 or none of your ssh keys is on github.com/{login}.keys"
             )),
             None => Err(line),
         }
