@@ -67,9 +67,10 @@ crates/
 └── typepper-server/       # HTTP + SSH over Postgres; deployed, never released
 infra/
 ├── railway/railway.ts     # the Railway project, as code
-├── docker/                # the server's image
+├── docker/                # the server's and the docs' images
 └── ssh/                   # the server's public host key (the game ships it)
-docs/                      # these docs
+docs/                      # these docs: play/, online/, reference/, built/
+site/                      # docs.typepper.com: Zola templates, and prepare.py (docs/ → content)
 index.html, web/, assets/  # the web page around the game, and its assets
 demo/                      # recording the README's GIFs
 mise.toml, mise.lock       # pinned tools and tasks

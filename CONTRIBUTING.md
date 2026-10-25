@@ -12,7 +12,8 @@ crates/typepper/          the game (terminal and web)
 crates/typepper-engine/   the rules, shared by the game and the server
 crates/typepper-server/   the server (HTTP + SSH over Postgres)
 infra/                    Railway, Docker, the server's host key
-docs/                     how it's built
+docs/                     playing it, the protocol, how it's built
+site/                     docs.typepper.com, made from docs/ (Zola)
 demo/                     recording the README's GIFs
 ```
 
