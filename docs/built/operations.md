@@ -154,8 +154,12 @@ mise run infra:deploy-docs  # the same, for docs.typepper.com
 
 Every `infra:*` task first checks that this folder is linked to typepper's
 Railway project (`TYPEPPER_RAILWAY_PROJECT` in `mise.toml`): an apply deletes
-whatever `railway.ts` doesn't name, in whichever project it reaches. Link
-once with `railway link -w Typepper -p <that id> -e production`.
+whatever `railway.ts` doesn't name, in whichever project it reaches. An
+unlinked folder (a fresh checkout or worktree) gets linked to that project,
+production environment, even when a parent folder is linked elsewhere
+(railway would otherwise fall back to the parent's project). A folder linked
+to another project itself is refused, never relinked. Linking needs
+`railway login` first.
 
 ## Watching it
 
