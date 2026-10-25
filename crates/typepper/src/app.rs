@@ -104,6 +104,8 @@ pub struct App {
     /// The GitHub login this machine is linked to (`typepper link`): its
     /// rounds go up on their own.
     account: Option<String>,
+    /// The boards beside the results chart, once opened.
+    strip: Option<Boards>,
 }
 
 impl App {
@@ -140,6 +142,7 @@ impl App {
             share: None,
             screens: 0,
             account: online::account(),
+            strip: None,
         }
     }
 
@@ -209,6 +212,24 @@ impl App {
             }
             return false;
         }
+        // the results screen: ←/→ walks the boards beside the chart (the
+        // first press opens them, at today), b opens the whole board
+        if let Screen::Play(r) = &self.screen
+            && self.strip_shown()
+            && matches!(key, Key::Left | Key::Right | Key::Char('b'))
+        {
+            let mode = r.setup.mode;
+            match (key, &mut self.strip) {
+                (Key::Char('b'), strip) => {
+                    let b = strip.take().unwrap_or_else(|| Boards::open(mode));
+                    self.go(Screen::Boards(b), now);
+                }
+                (Key::Left, Some(b)) => b.step(-1),
+                (Key::Right, Some(b)) => b.step(1),
+                (_, strip) => *strip = Some(Boards::open(mode)),
+            }
+            return false;
+        }
         match (&mut self.screen, key) {
             (Screen::Title, Key::Esc) => return true,
             // zen has no clock: esc is how it ends
@@ -258,6 +279,7 @@ impl App {
     }
 
     pub fn tick(&mut self, now: Instant) {
+        let mut landed = false;
         if let Some(share) = &mut self.share
             && let Ok(up) = &mut share.state
             && let Some(answer) = up.poll()
@@ -267,6 +289,20 @@ impl App {
                 // this round is the last one sent
                 online::answer(text.lines().last().unwrap_or(""))
             }));
+            landed = share.screen == self.screens && !share.outbox.is_empty();
+        }
+        // a linked player's round is in: the strip shows where it landed
+        if landed
+            && self.strip_shown()
+            && let Screen::Play(r) = &self.screen
+        {
+            match &mut self.strip {
+                Some(b) => b.step(0),
+                None => self.strip = Some(Boards::open(r.setup.mode)),
+            }
+        }
+        if let Some(b) = &mut self.strip {
+            b.tick();
         }
         let mut next = None;
         // demo: take the suggested starting level after a moment
@@ -367,7 +403,27 @@ impl App {
             Screen::Boards(b) => boards::draw(f, b, self.account.as_deref(), now),
             Screen::Play(r) | Screen::Watch(Watch { round: r, .. }) => match &r.game {
                 Game::Lava(l) if l.test.finished.is_none() => lava::draw(f, l, now),
-                _ => ui::draw(f, r.test(), self.outcome, self.share_hint().as_deref()),
+                _ => {
+                    let hint = self.share_hint();
+                    let strip = self.strip_shown();
+                    if let Some(area) = ui::draw(f, r.test(), self.outcome, hint.as_deref(), strip)
+                    {
+                        // a linked round on its way up: its board comes after it
+                        let saving = self.account.is_some()
+                            && self
+                                .share
+                                .as_ref()
+                                .is_some_and(|s| s.screen == self.screens && s.state.is_ok());
+                        let prompt = if saving {
+                            "…"
+                        } else {
+                            "←/→ today's board"
+                        };
+                        let score = r.result().and_then(|o| o.score).unwrap_or(f64::NAN);
+                        let me = self.account.as_deref();
+                        boards::strip(f, area, self.strip.as_ref(), me, score, prompt);
+                    }
+                }
             },
         }
         if let (Some(p), Some(t)) = (&self.pick, self.screen.test()) {
@@ -419,6 +475,18 @@ impl App {
         }
     }
 
+    /// The boards beside a finished round of yours (not offline, on touch
+    /// screens with no ←/→, for the bot, or for zen, which has no score).
+    fn strip_shown(&self) -> bool {
+        let Screen::Play(r) = &self.screen else {
+            return false;
+        };
+        !self.settings.offline
+            && !touch()
+            && self.bot.is_none()
+            && r.result().is_some_and(|o| o.score.is_some())
+    }
+
     /// The results screen's word on sharing (none offline, on touch screens
     /// with no u to press, or under someone else's replay).
     fn share_hint(&self) -> Option<String> {
@@ -450,6 +518,7 @@ impl App {
         self.since = now;
         (self.outcome, self.scored) = (None, false);
         self.pick = None;
+        self.strip = None;
         self.fade = self.frame.take().map(|b| (b, now));
     }
 }

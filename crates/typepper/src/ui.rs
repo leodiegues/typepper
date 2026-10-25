@@ -47,11 +47,19 @@ pub fn column(area: Rect) -> Rect {
 
 /// Typing screen or its results.
 /// `share`: the results screen's word on sharing the round, if any.
-pub fn draw(f: &mut Frame, t: &Test, outcome: Option<Outcome>, share: Option<&str>) {
+/// `strip`: room for the boards beside the results chart; where it went
+/// (once the chart's in, on a screen wide enough).
+pub fn draw(
+    f: &mut Frame,
+    t: &Test,
+    outcome: Option<Outcome>,
+    share: Option<&str>,
+    strip: bool,
+) -> Option<Rect> {
     let now = Instant::now();
     let col = column(f.area());
     if t.finished.is_some() {
-        return results(f, col, t, outcome, share, now);
+        return results(f, col, t, outcome, share, strip, now);
     }
     let [above, panel, _, help] = Layout::vertical([
         Constraint::Fill(1),
@@ -97,6 +105,7 @@ pub fn draw(f: &mut Frame, t: &Test, outcome: Option<Outcome>, share: Option<&st
             (1.0 - bust / 2.0) * (0.5 + 0.5 * beat),
         );
     }
+    None
 }
 
 /// Blitz's last 5 seconds: time since the clock last ticked over.
@@ -520,6 +529,10 @@ const PEAK_AT: f64 = 0.6;
 const CARDS_AT: f64 = 0.25;
 const CHART_AT: f64 = 0.5;
 const BEST_AT: f64 = 0.85;
+/// The boards strip's width, and the narrowest column that leaves the chart
+/// beside it enough room.
+const STRIP: u16 = 36;
+const STRIP_FROM: u16 = 76;
 
 fn results(
     f: &mut Frame,
@@ -527,8 +540,9 @@ fn results(
     t: &Test,
     outcome: Option<Outcome>,
     share: Option<&str>,
+    strip: bool,
     now: Instant,
-) {
+) -> Option<Rect> {
     let [_, top, _, cards, _, chart, _, details, _, help] = Layout::vertical([
         Constraint::Fill(1),
         Constraint::Length(14), // 3D pepper + score
@@ -673,6 +687,18 @@ fn results(
         );
     }
 
+    let (chart, board) = match strip && area.width >= STRIP_FROM {
+        true => {
+            let [chart, _, board] = Layout::horizontal([
+                Constraint::Fill(1),
+                Constraint::Length(1),
+                Constraint::Length(STRIP),
+            ])
+            .areas(chart);
+            (chart, Some(board))
+        }
+        false => (chart, None),
+    };
     let took = t.elapsed(now).as_secs_f64();
     let max_x = took.max(2.0);
     // the line draws itself left to right
@@ -743,6 +769,7 @@ fn results(
         None => format!("  {again}  "),
     };
     f.render_widget(Line::from(help_line).dark_gray().centered(), help);
+    board.filter(|_| secs >= CHART_AT)
 }
 
 /// "▄▄▄  BUSTED! · SCORE  ▄▄▄" between the cop's lights: BUSTED! lands

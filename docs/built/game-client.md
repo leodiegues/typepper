@@ -21,7 +21,9 @@ nothing blocks the game.
 |---|---|---|
 | a round ends, linked | the outbox goes up (`v1 submit`, as the player) | linked, `online` on, not the bot |
 | `u` on the results screen | this round goes up anonymously (linked: the outbox again) | `online` on, not a touch screen |
-| `b` on the menu, and each period after | `v1 board` | `online` on |
+| a linked round's upload answers | `v1 board`, today, for the strip beside the results chart | linked, `online` on, not a touch screen |
+| ←/→ on the results screen | `v1 board`, opening the strip at today, then each period | `online` on, not a touch screen |
+| `b` on the menu or the results screen, and each period after | `v1 board` | `online` on |
 | `typepper link` / `unlink` | `v1 link` / `v1 unlink` | run by hand, in the terminal |
 | `?replay=<id>` on the web | `GET /v1/runs/<id>` | the URL asks for it |
 
@@ -139,11 +141,19 @@ is unreachable, or none of the keys is on that account.
 ## The boards screen
 
 `b` on the menu opens the board of the selected card's mode, at its
-last-picked starting level. ←/→ switches today, this week, this month, this
-year and all time; each switch is one call. Non-all periods show
+last-picked starting level, starting at today. ←/→ switches today, this week,
+this month, this year and all time; each switch is one call. Non-all periods show
 "resets in … (UTC)", computed locally (calendar maths in `boards.rs`). The
 player's row is highlighted, and shown under the top 20 when it's lower.
 Esc goes back.
+
+The results screen has the same board as a strip beside the chart (only on a
+column at least 76 wide, and not for zen, which has no score). It opens by
+itself once a linked player's upload answers, so it's never behind their own
+round; for anyone else, at the first ←/→ press, which is the player's action
+(decision 1). A player who isn't on the board sees where this round would
+land (`#4?`, a tie going under) as `you, if linked`. ←/→ walks the periods,
+and `b` opens the full screen at the same period.
 
 ## Files
 

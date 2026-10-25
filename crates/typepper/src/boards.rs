@@ -1,8 +1,10 @@
-//! The leaderboards screen: one mode's top 20 for today, this week, this
-//! month, this year or all time, fetched when it opens and on each period
-//! (the player asked: opening it is the only network it does).
+//! The leaderboards: one mode's top 20 for today, this week, this month,
+//! this year or all time, fetched when it opens and on each period. Full
+//! screen from `b`, or as a strip beside the results chart: there it opens
+//! on ←/→, or by itself once a linked player's round is in.
 
 use ratatui::prelude::*;
+use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
 use web_time::Instant;
 
 use crate::engine::Mode;
@@ -27,11 +29,11 @@ pub struct Boards {
 }
 
 impl Boards {
-    /// `mode`'s board, all time first.
+    /// `mode`'s board, today first.
     pub fn open(mode: Mode) -> Boards {
         let mut b = Boards {
             mode,
-            period: PERIODS.len() - 1,
+            period: 0,
             call: None,
             rows: None,
         };
@@ -47,7 +49,7 @@ impl Boards {
         }
     }
 
-    /// The next period over (←/→).
+    /// The next period over (←/→; 0 fetches this one again).
     pub fn step(&mut self, dir: i64) {
         self.period = (self.period as i64 + dir).rem_euclid(PERIODS.len() as i64) as usize;
         self.fetch();
@@ -114,7 +116,7 @@ pub fn draw(f: &mut Frame, b: &Boards, me: Option<&str>, now: Instant) {
                 if r.me {
                     lines.push(Line::from("⋯".dark_gray()).centered());
                 }
-                let mine = r.me || me.is_some_and(|m| m.eq_ignore_ascii_case(&r.login));
+                let mine = mine(r, me);
                 let who = match mine {
                     true => format!("{} (you)", r.login),
                     false => r.login.clone(),
@@ -135,12 +137,138 @@ pub fn draw(f: &mut Frame, b: &Boards, me: Option<&str>, now: Instant) {
             lines
         }
     };
-    f.render_widget(ratatui::widgets::Paragraph::new(lines), table);
+    f.render_widget(Paragraph::new(lines), table);
     let hint = match me {
         Some(_) => "←/→ period · esc menu",
         None => "←/→ period · esc menu · `typepper link <github-login>` to be on it",
     };
     f.render_widget(Line::from(hint.dark_gray()).centered(), help);
+}
+
+/// The player's row: the server's `me`, or their login in the top 20.
+fn mine(r: &Row, me: Option<&str>) -> bool {
+    r.me || me.is_some_and(|m| m.eq_ignore_ascii_case(&r.login))
+}
+
+/// Where `score` would land among `rows` (a later run goes under a tie), or
+/// None past a full top 20.
+fn would_be(rows: &[Row], score: f64) -> Option<usize> {
+    let rank = 1 + rows.iter().filter(|r| !r.me && r.score >= score).count();
+    (rank <= TOP).then_some(rank)
+}
+
+const TOP: usize = 20;
+/// The strip's rows under its period line.
+const STRIP_ROWS: usize = 7;
+
+/// The board beside the results chart, `b` none until it's opened (it says
+/// `prompt` then). `score`: this round's, placed among the rows for a player
+/// who isn't on them (not linked).
+pub fn strip(
+    f: &mut Frame,
+    area: Rect,
+    b: Option<&Boards>,
+    me: Option<&str>,
+    score: f64,
+    prompt: &str,
+) {
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Color::DarkGray)
+        .title_bottom(Line::from(" b more ").dark_gray().right_aligned());
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    let Some(b) = b else {
+        let [_, mid, _] = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+        ])
+        .areas(inner);
+        f.render_widget(Line::from(prompt.dark_gray()).centered(), mid);
+        return;
+    };
+    let mut lines = vec![
+        Line::from(vec![
+            "◂ ".dark_gray(),
+            PERIODS[b.period].1.yellow().bold(),
+            " ▸".dark_gray(),
+        ])
+        .centered(),
+    ];
+    let rows = match &b.rows {
+        Some(Ok(rows)) => rows,
+        None => {
+            lines.push(Line::from("…".dark_gray()).centered());
+            return f.render_widget(Paragraph::new(lines), inner);
+        }
+        Some(Err(why)) => {
+            lines.push(Line::from(format!("couldn't load: {why}").dark_gray()));
+            return f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
+        }
+    };
+    // the width left for a login: rank, score and the spaces between
+    let room = (inner.width as usize).saturating_sub(4 + 1 + 1 + 9 + 2);
+    let line = |rank: String, who: String, score: f64| {
+        let who = match who.chars().count() > room {
+            true => format!(
+                "{}…",
+                who.chars().take(room.saturating_sub(1)).collect::<String>()
+            ),
+            false => who,
+        };
+        format!(" {rank:>4} {who:<room$} {:>9} ", best::show(b.mode, score))
+    };
+    // every row as it shows, and which one is the player
+    let linked = rows.iter().any(|r| mine(r, me));
+    let mut shown: Vec<(Line, bool)> = rows
+        .iter()
+        .map(|r| {
+            let you = mine(r, me);
+            let who = if you {
+                format!("{} (you)", r.login)
+            } else {
+                r.login.clone()
+            };
+            let text = line(format!("#{}", r.rank), who, r.score);
+            let text = match (you, r.rank) {
+                (true, _) => text.yellow().bold(),
+                (_, 1) => text.white().bold(),
+                _ => text.gray(),
+            };
+            (Line::from(text), you)
+        })
+        .collect();
+    if !linked && score.is_finite() {
+        let (at, rank) = match would_be(rows, score) {
+            Some(rank) => (rank - 1, format!("#{rank}?")),
+            None => (shown.len(), format!("#{}+", TOP + 1)),
+        };
+        // the web can't link yet
+        let you = match me.is_some() || cfg!(target_arch = "wasm32") {
+            true => "you".to_string(),
+            false => "you, if linked".to_string(),
+        };
+        shown.insert(
+            at.min(shown.len()),
+            (Line::from(line(rank, you, score).yellow().italic()), true),
+        );
+    }
+    if shown.is_empty() {
+        lines.push(Line::from("nobody yet: be first".dark_gray()).centered());
+    }
+    // the top, and the player under a ⋯ when they're further down
+    let you = shown.iter().position(|(_, you)| *you).unwrap_or(0);
+    match you < STRIP_ROWS {
+        true => lines.extend(shown.into_iter().take(STRIP_ROWS).map(|(l, _)| l)),
+        false => {
+            let mine = shown.remove(you).0;
+            lines.extend(shown.into_iter().take(STRIP_ROWS - 2).map(|(l, _)| l));
+            lines.push(Line::from("⋯".dark_gray()).centered());
+            lines.push(mine);
+        }
+    }
+    f.render_widget(Paragraph::new(lines), inner);
 }
 
 fn unix_now() -> u64 {
@@ -203,6 +331,25 @@ fn span(secs: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unranked_rounds_land_under_ties() {
+        let row = |rank, score| Row {
+            rank,
+            score,
+            login: "x".into(),
+            day: "2026-10-25".into(),
+            me: false,
+        };
+        let rows: Vec<Row> = (1..=3).map(|i| row(i, 100.0 - 10.0 * i as f64)).collect();
+        assert_eq!(would_be(&rows, 95.0), Some(1));
+        assert_eq!(would_be(&rows, 80.0), Some(3), "a tie goes under");
+        assert_eq!(would_be(&rows, 10.0), Some(4));
+        assert_eq!(would_be(&[], 10.0), Some(1), "an empty board");
+        let full: Vec<Row> = (1..=20).map(|i| row(i, 200.0 - i as f64)).collect();
+        assert_eq!(would_be(&full, 181.0), Some(20));
+        assert_eq!(would_be(&full, 10.0), None, "past a full top 20");
+    }
 
     #[test]
     fn boards_reset_on_utc_calendar_lines() {
