@@ -174,10 +174,13 @@ pub fn strip(
     score: f64,
     prompt: &str,
 ) {
-    let block = Block::bordered()
+    let mut block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(Color::DarkGray)
         .title_bottom(Line::from(" b more ").dark_gray().right_aligned());
+    if me.is_none() && cfg!(target_arch = "wasm32") {
+        block = block.title_bottom(Line::from(" l log in ").dark_gray().left_aligned());
+    }
     let inner = block.inner(area);
     f.render_widget(block, area);
     let Some(b) = b else {

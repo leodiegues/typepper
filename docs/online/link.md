@@ -27,7 +27,8 @@ asks.
 
 ## In the browser
 
-On the boards (b), press **l** to log in with GitHub. GitHub asks once to
+Press **l** on the title screen, the boards, or after a round to log in
+with GitHub. GitHub asks once to
 authorize typepper, which reads only your public profile. You come back
 logged in, and your rounds go up as you, just like a linked terminal game.
 **l** again logs out.
@@ -38,6 +39,7 @@ anonymous.
 
 ## After linking
 
+- Your login shows under the logo on the title screen, next to the version.
 - Every round you finish goes up by itself, as you, and the results line
   says where it landed: `saved: r.typepper.com/… · #3 all time`.
   Today's board opens beside the chart, with your row in it.

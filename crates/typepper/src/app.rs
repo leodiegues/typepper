@@ -212,6 +212,33 @@ impl App {
             }
             return false;
         }
+        // the web's l logs in with GitHub (or out): on the title, the boards,
+        // and a finished round
+        #[cfg(target_arch = "wasm32")]
+        if let Key::Char('l') = key
+            && !self.settings.offline
+            && match &self.screen {
+                Screen::Title => !self.menu.pressing(),
+                Screen::Boards(_) => true,
+                Screen::Play(r) => r.test().finished.is_some(),
+                Screen::Watch(_) => false,
+            }
+        {
+            match self.account.take() {
+                Some(_) => {
+                    online::log_out();
+                    // the boards drop the player's own row
+                    if let Some(b) = &mut self.strip {
+                        b.step(0);
+                    }
+                    if let Screen::Boards(b) = &mut self.screen {
+                        b.step(0);
+                    }
+                }
+                None => online::log_in(),
+            }
+            return false;
+        }
         // the results screen: ←/→ walks the boards beside the chart (the
         // first press opens them, at today), b opens the whole board
         if let Screen::Play(r) = &self.screen
@@ -262,15 +289,6 @@ impl App {
             }
             (Screen::Boards(b), Key::Left) => b.step(-1),
             (Screen::Boards(b), Key::Right) => b.step(1),
-            // the web logs in (or out) here; the terminal links with `typepper link`
-            #[cfg(target_arch = "wasm32")]
-            (Screen::Boards(b), Key::Char('l')) => match self.account.take() {
-                Some(_) => {
-                    online::log_out();
-                    b.step(0);
-                }
-                None => online::log_in(),
-            },
             (Screen::Boards(_), _) => {}
             (Screen::Title, _) => {}
             (Screen::Play(r), key) => match key {
@@ -406,7 +424,7 @@ impl App {
         let now = Instant::now();
         match &self.screen {
             Screen::Title => {
-                menu::draw(f, &self.menu, &self.bests, now);
+                menu::draw(f, &self.menu, &self.bests, self.account.as_deref(), now);
                 if let Some(d) = &self.dialog {
                     menu::dialog(f, d, &self.settings, now);
                 }

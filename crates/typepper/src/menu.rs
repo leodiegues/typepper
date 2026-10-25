@@ -431,7 +431,8 @@ fn ease_out_back(k: f64) -> f64 {
     1.0 + (c1 + 1.0) * k.powi(3) + c1 * k * k
 }
 
-pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, now: Instant) {
+/// `account`: who the player is linked (or, on the web, logged in) as.
+pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, account: Option<&str>, now: Instant) {
     let area = f.area();
     let col = ui::column(area);
     // logo a bit above the middle, the 3D pepper gets everything above it;
@@ -518,7 +519,9 @@ pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, now: Instant) {
     // fainter than the tagline's dark gray (120; light mode flips grays, so
     // it's fainter there too), padded so the scenery keeps its distance
     let faint = Color::Rgb(88, 88, 88);
-    Line::from(format!("  v{}  ", env!("CARGO_PKG_VERSION")).fg(faint))
+    // and who's playing, if anyone is
+    let who = account.map_or(String::new(), |a| format!(" · {a}"));
+    Line::from(format!("  v{}{who}  ", env!("CARGO_PKG_VERSION")).fg(faint))
         .centered()
         .render(version, f.buffer_mut());
 
@@ -529,12 +532,15 @@ pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, now: Instant) {
     let hint = match crate::settings::touch() {
         true => "  swipe ←/→ mode · ↑/↓ length · tap to play  ".to_string(),
         false => {
-            let boards = if crate::settings::offline() {
-                ""
-            } else {
-                " · b boards"
+            let online = !crate::settings::offline();
+            let boards = if online { " · b boards" } else { "" };
+            // the web logs in here (the terminal links with `typepper link`)
+            let login = match (online && cfg!(target_arch = "wasm32"), account) {
+                (false, _) => "",
+                (true, None) => " · l log in",
+                (true, Some(_)) => " · l log out",
             };
-            format!("  ←/→ mode · ↑/↓ length · enter play{boards} · s settings{QUIT}  ")
+            format!("  ←/→ mode · ↑/↓ length · enter play{boards}{login} · s settings{QUIT}  ")
         }
     };
     Line::from(hint.dark_gray())

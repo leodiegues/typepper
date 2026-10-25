@@ -18,6 +18,7 @@ The bottom line of every screen says what its keys do. All of them:
 | ↑/↓ | its length (floor is lava: lock-on or free aim) |
 | enter or space | play |
 | b | the boards for this mode |
+| l | browser only: log in with GitHub, or log out |
 | s or F2 | settings |
 | esc | quit (not in the browser: close the tab) |
 
@@ -40,6 +41,7 @@ Survival, floor is lava and hot pursuit then ask for a starting level: ←/→
 | u | share this round (see [share](../online/share.md)) |
 | ←/→ | the boards beside the chart: open them, then switch period |
 | b | the full board for this mode |
+| l | browser only: log in with GitHub, or log out |
 | esc | the menu |
 
 ## The boards
