@@ -1,7 +1,22 @@
 # typepper's docs
 
-How typepper is built, beyond what the code says. Start with
-[architecture](architecture.md); the rest goes deeper on one part each.
+Playing typepper, and how it's built.
+
+## For players
+
+| Doc | Read it for |
+|---|---|
+| [play/install.md](play/install.md) | the browser, the installers, `typepper upgrade` |
+| [play/modes.md](play/modes.md) | the six modes, levels, heat and ranks, what counts as a best |
+| [play/keys.md](play/keys.md) | every key, the settings, playing on a phone, flags |
+| [online/share.md](online/share.md) | sharing a round as a link |
+| [online/link.md](online/link.md) | linking your ssh key to your GitHub login |
+| [online/boards.md](online/boards.md) | the leaderboards, in the game and over HTTP |
+
+## How it's built
+
+Beyond what the code says. Start with [architecture](architecture.md); the
+rest goes deeper on one part each.
 
 | Doc | Read it for |
 |---|---|

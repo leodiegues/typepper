@@ -45,6 +45,8 @@ Or build it yourself: `cargo install --git https://github.com/leodiegues/typeppe
 
 Installed with one of the installers above? `typepper upgrade` gets you the latest version.
 
+Modes, keys, sharing and the boards: [docs/](docs/README.md#for-players).
+
 ## A look
 
 Six modes on a carousel: sprint, blitz, zen, survival, floor is lava and hot pursuit.
