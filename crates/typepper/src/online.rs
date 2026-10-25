@@ -2,7 +2,7 @@
 //! Only ever on the player's say-so (pressing u, or having linked their
 //! account), never at startup or while playing, and a failure is one line of
 //! text. Desktop runs the system `ssh`, where a linked key is who the player
-//! is; the web uses fetch, anonymously for now. See docs/game-client.md.
+//! is; the web uses fetch, anonymously for now. See docs/built/game-client.md.
 
 /// The server's public host key: ssh refuses anything else.
 #[cfg(not(target_arch = "wasm32"))]

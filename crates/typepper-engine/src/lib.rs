@@ -1,6 +1,6 @@
 //! typepper's rules, the same wherever they run: the game, the browser, and
 //! the server that scores a run by playing its inputs again (see
-//! docs/engine.md). A `Round` is driven by inputs at whole milliseconds and a
+//! docs/built/engine.md). A `Round` is driven by inputs at whole milliseconds and a
 //! fixed-step clock, with one seeded `Rng`, so the same `Setup` and inputs
 //! always give the same round, at any frame rate.
 

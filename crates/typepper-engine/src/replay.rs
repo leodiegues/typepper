@@ -1,5 +1,5 @@
 //! A round as bytes: what the game uploads, the server stores and scores,
-//! and the web player plays back (docs/replays.md).
+//! and the web player plays back (docs/reference/replays.md).
 //!
 //! ```text
 //! "TPR" | format u8 | engine u32 LE | mode key (u8 length + UTF-8) | seed u64 LE
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn format_1_bytes_are_these() {
-        // docs/replays.md's example: if this moves, format 1 changed
+        // docs/reference/replays.md's example: if this moves, format 1 changed
         #[rustfmt::skip]
         let want = [
             b'T', b'P', b'R',

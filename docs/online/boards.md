@@ -41,4 +41,4 @@ The boards are plain text over HTTP:
 curl 'https://api.typepper.com/v1/boards/time:30?period=week'
 ```
 
-Mode keys and the rest are in the [protocol](../protocol.md#boards).
+Mode keys and the rest are in the [protocol](../reference/protocol.md#boards).

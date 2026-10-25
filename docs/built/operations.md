@@ -82,7 +82,7 @@ flowchart LR
   so the previous deploy keeps working while the new one comes up.
 - **To redeploy a tag** (after an infra change, say):
   `gh workflow run deploy-production.yml --ref vX.Y.Z`.
-- Releasing itself is the [release skill](../.claude/skills/release/SKILL.md):
+- Releasing itself is the [release skill](../../.claude/skills/release/SKILL.md):
   `cargo release`, then watching the runs and checking what landed.
 
 ## Secrets

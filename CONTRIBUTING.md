@@ -3,7 +3,7 @@
 Thanks for wanting to make typepper better. This covers setting up, running
 every part, testing, and what a good change looks like. How things are built
 is in [docs/](docs/README.md); start with
-[docs/architecture.md](docs/architecture.md).
+[docs/built/architecture.md](docs/built/architecture.md).
 
 ## What's here
 
@@ -86,8 +86,8 @@ docker run -d --rm --name tp-test -e POSTGRES_PASSWORD=pw -p 55433:5432 postgres
 TYPEPPER_TEST_DATABASE_URL=postgres://postgres:pw@localhost:55433/postgres cargo test --workspace
 ```
 
-What's covered is in each part's doc ([engine](docs/engine.md#the-tests-that-hold-it),
-[replays](docs/replays.md#decoding), [server](docs/server.md#tests)). Leave
+What's covered is in each part's doc ([engine](docs/built/engine.md#the-tests-that-hold-it),
+[replays](docs/reference/replays.md#decoding), [server](docs/built/server.md#tests)). Leave
 one runnable check behind for logic that can break: a test that fails if the
 logic does. Small tests, close to the code, no frameworks.
 
@@ -110,21 +110,21 @@ If you touched the web build, run `trunk build --release` too.
 - **Changing the rules?** Anything that would change a round's result (balance,
   the word list, how the rng is used, the timestep) needs `engine::VERSION`
   bumped and the golden numbers re-recorded. The `same_numbers_on_every_platform`
-  test tells you when. See [engine.md](docs/engine.md#version).
+  test tells you when. See [engine.md](docs/built/engine.md#version).
 - **Migrations only add**: tables, nullable or defaulted columns, indexes.
   Never edit an applied migration; drops and renames wait for a later
-  release. See [server.md](docs/server.md#database).
+  release. See [server.md](docs/built/server.md#database).
 - **Protocol commands don't change meaning.** A different shape is a new
   version (`v2`) next to the old one, since released games keep calling what
-  they were built with. See [protocol.md](docs/protocol.md#versioning).
+  they were built with. See [protocol.md](docs/reference/protocol.md#versioning).
 - **Never break offline.** No network calls at startup or during play, nothing
   sent without the player asking, no prompt over the game.
-  See [architecture.md](docs/architecture.md#principles).
+  See [architecture.md](docs/built/architecture.md#principles).
 - **Mode keys are forever** (`time:30`, `pursuit:7`): replays and boards are
   stored under them.
 - **Pins stay pins.** Actions by SHA, images by digest, tools in
   `mise.lock`. Dependabot bumps most; see
-  [operations.md](docs/operations.md#pinned-by-hash).
+  [operations.md](docs/built/operations.md#pinned-by-hash).
 - **Don't edit `.github/workflows/release.yml`**: `dist` generates it.
 
 ## Style
@@ -160,7 +160,7 @@ Maintainers release with `cargo release` (configured in
 installers, deploys typepper.com, and deploys the server, together. The
 steps, checks and verification are in
 [.claude/skills/release/SKILL.md](.claude/skills/release/SKILL.md);
-infrastructure is in [docs/operations.md](docs/operations.md).
+infrastructure is in [docs/built/operations.md](docs/built/operations.md).
 
 ## License
 

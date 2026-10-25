@@ -15,20 +15,20 @@ Playing typepper, and how it's built.
 
 ## How it's built
 
-Beyond what the code says. Start with [architecture](architecture.md); the
+Beyond what the code says. Start with [architecture](built/architecture.md); the
 rest goes deeper on one part each.
 
 | Doc | Read it for |
 |---|---|
-| [architecture.md](architecture.md) | the whole system: principles, components, hosts, crates, how a round travels, what's trusted |
-| [engine.md](engine.md) | the rules crate and why a round plays back the same everywhere: `Round`, `Mode`, the fixed timestep, the rng, `VERSION` |
-| [replays.md](replays.md) | the replay format byte by byte, decoding rules, watching and sharing replays |
-| [protocol.md](protocol.md) | what the game and the server say to each other, over SSH and HTTP |
-| [server.md](server.md) | `typepper-server`: modules, database, ids, accounts and linking, boards, the sweep, configuration |
-| [game-client.md](game-client.md) | the game's online side: transports, the outbox, sharing, the boards screen, local files, flags |
-| [operations.md](operations.md) | Railway, deploys, secrets, CI, pinned tools, local development, the runbook |
-| [decisions.md](decisions.md) | why things are the way they are |
-| [roadmap.md](roadmap.md) | what's open |
+| [architecture.md](built/architecture.md) | the whole system: principles, components, hosts, crates, how a round travels, what's trusted |
+| [engine.md](built/engine.md) | the rules crate and why a round plays back the same everywhere: `Round`, `Mode`, the fixed timestep, the rng, `VERSION` |
+| [replays.md](reference/replays.md) | the replay format byte by byte, decoding rules, watching and sharing replays |
+| [protocol.md](reference/protocol.md) | what the game and the server say to each other, over SSH and HTTP |
+| [server.md](built/server.md) | `typepper-server`: modules, database, ids, accounts and linking, boards, the sweep, configuration |
+| [game-client.md](built/game-client.md) | the game's online side: transports, the outbox, sharing, the boards screen, local files, flags |
+| [operations.md](built/operations.md) | Railway, deploys, secrets, CI, pinned tools, local development, the runbook |
+| [decisions.md](built/decisions.md) | why things are the way they are |
+| [roadmap.md](built/roadmap.md) | what's open |
 
 To work on typepper, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
@@ -40,11 +40,11 @@ sections:
 
 | `online.md` section | Now in |
 |---|---|
-| Premise, Architecture, Repository layout | [architecture.md](architecture.md) |
-| Engine contract | [engine.md](engine.md) |
-| Protocol: Replay bytes | [replays.md](replays.md) |
-| Protocol: Submission, Commands, Responses, Server limits | [protocol.md](protocol.md) |
-| Identity, Database, Boards, Sweep | [server.md](server.md) |
-| Game client | [game-client.md](game-client.md) |
-| Deploys | [operations.md](operations.md) |
-| Phases, Open, Risks | [roadmap.md](roadmap.md), [decisions.md](decisions.md) |
+| Premise, Architecture, Repository layout | [architecture.md](built/architecture.md) |
+| Engine contract | [engine.md](built/engine.md) |
+| Protocol: Replay bytes | [replays.md](reference/replays.md) |
+| Protocol: Submission, Commands, Responses, Server limits | [protocol.md](reference/protocol.md) |
+| Identity, Database, Boards, Sweep | [server.md](built/server.md) |
+| Game client | [game-client.md](built/game-client.md) |
+| Deploys | [operations.md](built/operations.md) |
+| Phases, Open, Risks | [roadmap.md](built/roadmap.md), [decisions.md](built/decisions.md) |

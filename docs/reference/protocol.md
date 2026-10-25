@@ -21,7 +21,7 @@ same way whichever way they came.
 |---|---|---|
 | commands | `v1` (SSH), `/v1` (HTTP) | a request or an answer changes shape |
 | replay bytes | `format` | the byte layout changes ([replays](replays.md)) |
-| rules | `engine` | results would change ([engine](engine.md)) |
+| rules | `engine` | results would change ([engine](../built/engine.md)) |
 
 Released games keep calling what they were built with, so a `v1` command
 never changes meaning: a different shape gets `v2`, next to it. `/health`,
@@ -42,7 +42,7 @@ for checking the door is open.
 | `ping` | `GET /health` | `pong`; readiness |
 
 The SSH user matters: **`typepper`** is the game, and any other user is a
-GitHub login asking to link (see [server](server.md#accounts-and-linking)).
+GitHub login asking to link (see [server](../built/server.md#accounts-and-linking)).
 Anything else over SSH answers `err unknown-command <it>` with exit status 1;
 a plain `ssh` without a command prints that there's no shell and exits.
 

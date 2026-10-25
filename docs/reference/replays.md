@@ -106,8 +106,8 @@ every truncation point, junk, and two replays read off one stream.
 | Where | What |
 |---|---|
 | the game, after every round | `last.replay` in the data dir (hex text, so localStorage can hold it on the web) |
-| the game, linked and not yet sent | `outbox/<unix ms>` (see [game client](game-client.md)) |
-| the server | `runs.replay`, a `bytea` next to the server's numbers (see [server](server.md)) |
+| the game, linked and not yet sent | `outbox/<unix ms>` (see [game client](../built/game-client.md)) |
+| the server | `runs.replay`, a `bytea` next to the server's numbers (see [server](../built/server.md)) |
 
 ## Watching
 

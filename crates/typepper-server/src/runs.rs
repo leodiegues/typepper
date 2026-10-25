@@ -1,5 +1,5 @@
 //! Runs: a submission's replays are each played again here, and stored with
-//! the server's own numbers (docs/protocol.md). The answer is one
+//! the server's own numbers (docs/reference/protocol.md). The answer is one
 //! line per replay, the same over SSH and HTTP:
 //!
 //! ```text

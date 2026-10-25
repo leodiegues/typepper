@@ -20,7 +20,7 @@ give the same round, on any platform, at any frame rate.
 | `test.rs` | `Test`: one typing test (heat, ranks, combo, score, levels, fuel, the cop), `RANKS`, `random_words` |
 | `lava.rs` | FLOOR IS LAVA's field: drops, lock-on and free aim, landings |
 | `rng.rs` | `Rng`, SplitMix64 written out |
-| `replay.rs` | the replay format (see [replays](replays.md)) |
+| `replay.rs` | the replay format (see [replays](../reference/replays.md)) |
 | `words.txt` | the word list |
 
 The game keeps everything that draws: `ui.rs`, `fx.rs`, `lava.rs` (the field

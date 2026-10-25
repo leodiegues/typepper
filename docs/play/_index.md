@@ -2,7 +2,7 @@
 title: play
 weight: 1
 extra:
-  pepper: bell
+  pepper: bell pepper
 ---
 
 # Play

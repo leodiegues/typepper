@@ -235,4 +235,4 @@ table. Entries older than an hour are forgotten at each call.
 
 The Postgres tests run when `TYPEPPER_TEST_DATABASE_URL` is set, migrating
 it first, and pass with a note otherwise. CI provides Postgres 18, Railway's
-major version. See [CONTRIBUTING](../CONTRIBUTING.md#tests).
+major version. See [CONTRIBUTING](../../CONTRIBUTING.md#tests).
