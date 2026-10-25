@@ -1,3 +1,12 @@
+---
+extra:
+  covers:
+    - crates/typepper/src/online.rs
+    - crates/typepper/src/boards.rs
+    - crates/typepper/src/store.rs
+    - crates/typepper/src/main.rs
+---
+
 # The game's online side
 
 How `crates/typepper` talks to typepper.com, and the files and flags around

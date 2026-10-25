@@ -100,6 +100,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo clippy -p typepper --target wasm32-unknown-unknown --locked -- -D warnings
 cargo test --workspace --locked
+.github/docs-check.sh origin/main   # docs whose code you changed
 ```
 
 If you touched the web build, run `trunk build --release` too.
@@ -144,6 +145,10 @@ If you touched the web build, run `trunk build --release` too.
   explains why, wrapped at about 72 columns.
 - **One concern per pull request**, with a description of what changed, why,
   and how you checked it (what you ran, what you saw).
+- **Docs move with the code.** Each page in `docs/` lists the code it covers
+  (`covers` in its front matter); change that code and CI asks for the page
+  too. If nothing it says became wrong, put a `docs: none` line in the
+  description. The docs-sync skill finds and proposes the edits.
 - **Player-visible changes** get a bullet under `## Unreleased` in
   `CHANGELOG.md`, written for players: what they'll notice and why it's nice.
   Refactors, CI and internals stay out.

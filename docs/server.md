@@ -1,3 +1,9 @@
+---
+extra:
+  covers:
+    - crates/typepper-server/**
+---
+
 # The server
 
 `crates/typepper-server` is one binary that serves HTTP (axum) and SSH

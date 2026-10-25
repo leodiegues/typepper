@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a typepper release end to end — check main is releasable, pick the version from what changed, write player-facing changelog notes, tag and push with cargo-release, then watch the release and site deploy and verify typepper.com and the installer. Use whenever the user wants to release, ship, publish, tag, bump the version, or "put out" a new typepper version, even if they don't say "release".
+description: Cut a typepper release end to end — check main is releasable, pick the version from what changed, write player-facing changelog notes, sync the docs, tag and push with cargo-release, then watch the release and site deploy and verify typepper.com and the installer. Use whenever the user wants to release, ship, publish, tag, bump the version, or "put out" a new typepper version, even if they don't say "release".
 ---
 
 # Releasing typepper
@@ -61,11 +61,18 @@ short plain bullets. Leave out refactors, CI and internals unless they change
 something a player sees (a fix for a crash counts; "moved code into store.rs"
 doesn't). Look at the `0.1.0` section for the tone.
 
-Show the user the proposed version and notes and wait for their OK. Then
-commit the changelog (cargo-release refuses a dirty tree):
+Then run the docs-sync skill from the last tag, so the docs describe what
+ships. It only reads pages no pull request since the tag touched (those that
+said `docs: none`, or went in without one): usually a few, usually with
+nothing to change.
+
+Show the user the proposed version, notes and doc edits, and wait for their
+OK. Then commit them (cargo-release refuses a dirty tree; `git add` picks up
+a new doc page, which `-a` wouldn't):
 
 ```sh
-git commit -am "Changelog for vX.Y.Z"
+git add CHANGELOG.md docs/
+git commit -m "Changelog for vX.Y.Z"
 ```
 
 ## 4. Release

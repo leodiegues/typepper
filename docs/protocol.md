@@ -1,3 +1,13 @@
+---
+extra:
+  covers:
+    - crates/typepper-server/src/http.rs
+    - crates/typepper-server/src/ssh.rs
+    - crates/typepper-server/src/runs.rs
+    - crates/typepper-server/src/board.rs
+    - crates/typepper/src/online.rs
+---
+
 # Protocol
 
 What the game and the server say to each other. The terminal game talks over
@@ -124,6 +134,7 @@ ok linked <Login>                  (as GitHub spells it)
 
 The SSH login only gets in with a key listed on
 `github.com/<github-login>.keys`; otherwise ssh reports `Permission denied`.
+`v1 link` as `typepper` answers `err not-linking …`.
 `typepper link <login>` runs this for you. After linking, `v1 whoami` as
 `typepper` with that key answers `ok <login>`, and its submissions are that
 player's. `v1 unlink` answers `ok unlinked` (or `ok not-linked`).

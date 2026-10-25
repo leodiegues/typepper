@@ -1,3 +1,9 @@
+---
+extra:
+  covers:
+    - crates/typepper-engine/src/replay.rs
+---
+
 # Replays
 
 A replay is a round's start and every input, at its millisecond. Played

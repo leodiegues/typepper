@@ -1,0 +1,24 @@
+# Pull requests that change code a doc covers must touch that doc, or say
+# "docs: none" on a line of their description. Updating the docs is the
+# docs-sync skill, run locally; this only checks.
+name: docs
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened] # edited: adding "docs: none"
+
+permissions:
+  contents: read
+
+jobs:
+  covered:
+    # dependabot bumps actions and infra, which operations.md covers, and can't say "docs: none"
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # the merge commit and the base it sits on
+      - run: .github/docs-check.sh
+        env:
+          BODY: ${{ github.event.pull_request.body }}

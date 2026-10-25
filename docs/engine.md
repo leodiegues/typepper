@@ -1,3 +1,9 @@
+---
+extra:
+  covers:
+    - crates/typepper-engine/src/**
+---
+
 # The engine
 
 `crates/typepper-engine` is typepper's rules: typing, heat and ranks,
