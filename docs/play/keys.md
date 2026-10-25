@@ -42,6 +42,14 @@ Survival, floor is lava and hot pursuit then ask for a starting level: ←/→
 | b | the full board for this mode |
 | esc | the menu |
 
+## The boards
+
+| Key | Does |
+|---|---|
+| ←/→ | the period: today, this week, month, year, all time |
+| l | browser only: log in with GitHub to be on them, or log out |
+| esc | the menu |
+
 ## Settings
 
 ↑/↓ picks a row, ←/→ changes it, esc closes. Changes save at once.

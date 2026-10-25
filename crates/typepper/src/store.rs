@@ -58,14 +58,33 @@ mod imp {
             .set_item(&format!("typepper.{name}"), text)
             .map_err(|_| ())
     }
+
+    /// The names under `dir/`, sorted.
+    pub fn list(dir: &str) -> Vec<String> {
+        let Some(local) = local() else {
+            return Vec::new();
+        };
+        let mut names: Vec<String> = (0..local.length().unwrap_or(0))
+            .filter_map(|i| local.key(i).ok()?)
+            .filter_map(|k| Some(k.strip_prefix("typepper.")?.to_string()))
+            .filter(|n| n.strip_prefix(dir).is_some_and(|r| r.starts_with('/')))
+            .collect();
+        names.sort();
+        names
+    }
+
+    pub fn remove(name: &str) {
+        if let Some(local) = local() {
+            let _ = local.remove_item(&format!("typepper.{name}"));
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use imp::{list, path, remove};
-pub use imp::{read, write};
+pub use imp::path;
+pub use imp::{list, read, remove, write};
 
 /// Bytes, kept as hex (localStorage only holds text).
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the web reads them once it uploads
 pub fn read_bytes(name: &str) -> Option<Vec<u8>> {
     unhex(read(name)?.trim())
 }
@@ -79,7 +98,6 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 fn unhex(text: &str) -> Option<Vec<u8>> {
     (0..text.len())
         .step_by(2)

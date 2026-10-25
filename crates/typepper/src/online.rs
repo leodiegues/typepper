@@ -2,7 +2,13 @@
 //! Only ever on the player's say-so (pressing u, or having linked their
 //! account), never at startup or while playing, and a failure is one line of
 //! text. Desktop runs the system `ssh`, where a linked key is who the player
-//! is; the web uses fetch, anonymously for now. See docs/built/game-client.md.
+//! is; the web uses fetch, where a session cookie from logging in with GitHub
+//! is. See docs/built/game-client.md.
+
+use crate::store;
+
+/// Rounds a linked player's outbox keeps until they go up.
+const OUTBOX: usize = 20;
 
 /// The server's public host key: ssh refuses anything else.
 #[cfg(not(target_arch = "wasm32"))]
@@ -78,10 +84,47 @@ pub fn rows(text: &str) -> Result<Vec<Row>, String> {
         .collect())
 }
 
+/// The GitHub login this player is linked to (`typepper link`) or logged in
+/// as (the web), if they are.
+pub fn account() -> Option<String> {
+    let login = store::read("account")?;
+    Some(login.trim().to_string()).filter(|l| !l.is_empty())
+}
+
+/// Keeps a finished round for upload (dropping the oldest past 20).
+pub fn outbox_add(replay: &[u8], claimed: Option<f64>) {
+    let ms = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    store::write_bytes(&format!("outbox/{ms}"), &submission(replay, claimed));
+    let all = store::list("outbox");
+    for old in &all[..all.len().saturating_sub(OUTBOX)] {
+        store::remove(old);
+    }
+}
+
+/// The outbox, oldest first: its names and, back to back, a submission.
+pub fn outbox() -> (Vec<String>, Vec<u8>) {
+    let mut body = Vec::new();
+    let names = store::list("outbox")
+        .into_iter()
+        .filter(|n| store::read_bytes(n).map(|b| body.extend(b)).is_some())
+        .collect();
+    (names, body)
+}
+
+/// Takes out what the server's answer settles: kept, or never will be.
+pub fn outbox_settle(names: &[String], answer: &str) {
+    for (name, line) in names.iter().zip(answer.lines()) {
+        if settled(line) {
+            store::remove(name);
+        }
+    }
+}
+
 /// Whether one line of an answer settles its replay: stored, or never will
-/// be (too old, broken, too big). Anything else (busy, rate-limited, no line
-/// at all) keeps it for the next try.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+/// be (too old, broken, too big). Anything else (busy, rate-limited, signed
+/// out, no line at all) keeps it for the next try.
 fn settled(line: &str) -> bool {
     let done = ["ok ", "err old-engine ", "err bad-replay ", "err too-big "];
     done.iter().any(|d| line.starts_with(d))
@@ -106,16 +149,10 @@ mod imp {
 
     use crate::store;
 
+    use super::account;
+
     /// The game's user on the server; any other is a GitHub login linking.
     const GAME_USER: &str = "typepper";
-    /// Rounds a linked player's outbox keeps until they go up.
-    const OUTBOX: usize = 20;
-
-    /// The GitHub login this machine's ssh key is linked to, if it is.
-    pub fn account() -> Option<String> {
-        let login = store::read("account")?;
-        Some(login.trim().to_string()).filter(|l| !l.is_empty())
-    }
 
     /// A call to the server under way (a submission, or a board).
     pub struct Call {
@@ -232,37 +269,6 @@ mod imp {
         }
     }
 
-    /// Keeps a finished round for upload (dropping the oldest past 20).
-    pub fn outbox_add(replay: &[u8], claimed: Option<f64>) {
-        let ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_millis());
-        store::write_bytes(&format!("outbox/{ms}"), &super::submission(replay, claimed));
-        let all = store::list("outbox");
-        for old in &all[..all.len().saturating_sub(OUTBOX)] {
-            store::remove(old);
-        }
-    }
-
-    /// The outbox, oldest first: its names and, back to back, a submission.
-    pub fn outbox() -> (Vec<String>, Vec<u8>) {
-        let mut body = Vec::new();
-        let names = store::list("outbox")
-            .into_iter()
-            .filter(|n| store::read_bytes(n).map(|b| body.extend(b)).is_some())
-            .collect();
-        (names, body)
-    }
-
-    /// Takes out what the server's answer settles: kept, or never will be.
-    pub fn outbox_settle(names: &[String], answer: &str) {
-        for (name, line) in names.iter().zip(answer.lines()) {
-            if super::settled(line) {
-                store::remove(name);
-            }
-        }
-    }
-
     /// `ssh` to the server as `user` with `options`, running `command`, with
     /// no prompt about the host: its key is checked, never asked about.
     fn ssh(user: &str, options: &[&str], command: &[&str]) -> Result<Command, String> {
@@ -309,6 +315,9 @@ mod imp {
     use ratzilla::web_sys::{self, js_sys};
     use wasm_bindgen_futures::JsFuture;
 
+    use super::account;
+    use crate::store;
+
     type Slot = Rc<RefCell<Option<Result<String, String>>>>;
 
     /// A fetch under way.
@@ -318,11 +327,23 @@ mod imp {
         pub fn submit(body: Vec<u8>) -> Result<Call, String> {
             let slot = Slot::default();
             let done = slot.clone();
+            // logged in: as the player, or not at all (the outbox waits)
+            let path = match account() {
+                Some(_) => "/v1/me/runs",
+                None => "/v1/runs",
+            };
             wasm_bindgen_futures::spawn_local(async move {
-                let answer = post(body).await;
+                let answer = post(path, body).await;
                 let first = answer.as_deref().map(|t| t.lines().next().unwrap_or(""));
-                if let Ok(Ok(link)) = first.map(super::answer) {
-                    copy(&format!("https://{link}"));
+                match first {
+                    // the session's gone: logged out here too
+                    Ok(l) if l.starts_with("err signed-out ") => store::remove("account"),
+                    Ok(l) if path == "/v1/runs" => {
+                        if let Ok(link) = super::answer(l) {
+                            copy(&format!("https://{link}"));
+                        }
+                    }
+                    _ => {}
                 }
                 *done.borrow_mut() = Some(answer);
             });
@@ -344,9 +365,62 @@ mod imp {
         }
     }
 
+    /// Off to GitHub to log in; the page comes back with `?login=`.
+    pub fn log_in() {
+        if let Some(w) = web_sys::window() {
+            let _ = w.location().set_href(&format!("{}/auth/github", api()));
+        }
+    }
+
+    /// Forgets the login here, and ends its session on the server.
+    pub fn log_out() {
+        store::remove("account");
+        let init = with_cookies("POST");
+        let url = format!("{}/auth/logout", api());
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Some(w) = web_sys::window() {
+                let _ = JsFuture::from(w.fetch_with_str_and_init(&url, &init)).await;
+            }
+        });
+    }
+
+    /// `?login=<login>`, as the server sends a player back from GitHub:
+    /// kept as the account, and taken out of the address.
+    pub fn arrived() {
+        let Some(w) = web_sys::window() else { return };
+        let query = w.location().search().unwrap_or_default();
+        let Some(login) = query
+            .trim_start_matches('?')
+            .split('&')
+            .find_map(|kv| kv.strip_prefix("login="))
+        else {
+            return;
+        };
+        // only what a GitHub login can be: it shows on screen, nothing more
+        let ok = (1..=39).contains(&login.len())
+            && login
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-');
+        if ok {
+            let _ = store::write("account", login);
+        }
+        if let Ok(h) = w.history() {
+            let _ = h.replace_state_with_url(&web_sys::wasm_bindgen::JsValue::NULL, "", Some("/"));
+        }
+    }
+
+    /// A request that brings the session cookie along.
+    fn with_cookies(method: &str) -> web_sys::RequestInit {
+        let init = web_sys::RequestInit::new();
+        init.set_method(method);
+        init.set_credentials(web_sys::RequestCredentials::Include);
+        init
+    }
+
     async fn get_text(url: &str) -> Result<String, String> {
         let window = web_sys::window().ok_or("no window")?;
-        let response = JsFuture::from(window.fetch_with_str(url))
+        let init = with_cookies("GET");
+        let response = JsFuture::from(window.fetch_with_str_and_init(url, &init))
             .await
             .map_err(|_| "couldn't reach typepper.com".to_string())?;
         let response: web_sys::Response = response.into();
@@ -356,12 +430,11 @@ mod imp {
         text.as_string().ok_or("no answer".into())
     }
 
-    async fn post(body: Vec<u8>) -> Result<String, String> {
+    async fn post(path: &str, body: Vec<u8>) -> Result<String, String> {
         let window = web_sys::window().ok_or("no window")?;
-        let init = web_sys::RequestInit::new();
-        init.set_method("POST");
+        let init = with_cookies("POST");
         init.set_body(&js_sys::Uint8Array::from(&body[..]).into());
-        let url = format!("{}/v1/runs", api());
+        let url = format!("{}{path}", api());
         let response = JsFuture::from(window.fetch_with_str_and_init(&url, &init))
             .await
             .map_err(|_| "couldn't reach typepper.com".to_string())?;
@@ -371,19 +444,6 @@ mod imp {
             .map_err(|_| "no answer".to_string())?;
         text.as_string().ok_or("no answer".into())
     }
-
-    // the web is anonymous until it gets a login: no account, no outbox
-    pub fn account() -> Option<String> {
-        None
-    }
-
-    pub fn outbox_add(_: &[u8], _: Option<f64>) {}
-
-    pub fn outbox() -> (Vec<String>, Vec<u8>) {
-        (Vec::new(), Vec::new())
-    }
-
-    pub fn outbox_settle(_: &[String], _: &str) {}
 
     /// A replay's bytes, for `?replay=<id>`.
     pub async fn fetch(id: &str) -> Result<Vec<u8>, String> {

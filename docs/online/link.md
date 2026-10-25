@@ -25,7 +25,16 @@ It works if one of your ssh keys is listed at
 added to GitHub. Your ssh agent may ask to use it; that's the one time it
 asks.
 
-Linking is in the terminal game. The browser plays anonymously for now.
+## In the browser
+
+On the boards (b), press **l** to log in with GitHub. GitHub asks once to
+authorize typepper, which reads only your public profile. You come back
+logged in, and your rounds go up as you, just like a linked terminal game.
+**l** again logs out.
+
+If the login runs out (or you clear the site's data), your next rounds wait
+in the browser until you log in again. Rounds played while logged out stay
+anonymous.
 
 ## After linking
 

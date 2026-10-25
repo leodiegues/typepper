@@ -17,7 +17,6 @@ What's built, and what's open.
 
 | | Why | Notes |
 |---|---|---|
-| **Web login** | web players can watch boards but not be on them | a GitHub OAuth app; `/auth/github` → `/auth/callback`; a `sessions` table (a 256-bit cookie secret, only its hash stored, `Domain=typepper.com`, `SameSite=Lax`); CORS with credentials; the outbox on the web |
 | **Smooth deploys** | about 2 in 45 SSH connections fail at a deploy's switch | finish open sessions on SIGTERM; `overlapSeconds` / `drainingSeconds` in `railway.ts` |
 | **Sharing on touch screens** | phones have no `u` | a tap target on the results screen |
 | **Anonymous quota behind the TCP proxy** | keyless SSH callers may all arrive from Railway's address and share one quota | check the logged address in production; key the quota differently, or raise it |

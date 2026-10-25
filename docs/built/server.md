@@ -22,13 +22,14 @@ src/
 ├── ssh.rs        # the SSH door: auth, commands → core → answer lines
 ├── runs.rs       # submit (decode, simulate, store), replay bytes, share pages, the quota
 ├── board.rs      # boards, ranks, the sweep
-├── accounts.rs   # players and their ssh keys: link, unlink, who a key is
-├── github.rs     # a login's public keys and numeric id, from GitHub
+├── accounts.rs   # players, their ssh keys and web sessions: link, unlink, sign in and out, who a key or cookie is
+├── github.rs     # a login's public keys and numeric id, and who logged in, from GitHub
 └── id.rs         # random base62 ids, with_new_id
 migrations/
 ├── 0001_runs.sql
 ├── 0002_players.sql
-└── 0003_boards.sql
+├── 0003_boards.sql
+└── 0004_sessions.sql
 ```
 
 `http.rs` and `ssh.rs` hold no logic: both call the same core functions,
@@ -54,6 +55,7 @@ database at runtime, so building needs no database.
 | `PORT` | 8080 | HTTP (Railway's variable; its domains and health check use it) |
 | `TYPEPPER_SSH_PORT` | 2222 | SSH (the TCP proxy's target) |
 | `TYPEPPER_GITHUB` | GitHub | points the GitHub calls at a stand-in, for tests |
+| `TYPEPPER_GITHUB_CLIENT_ID`, `TYPEPPER_GITHUB_CLIENT_SECRET` | | the GitHub App web login goes through; unset, `/auth/*` answers "login isn't set up" |
 | `RAILWAY_DEPLOYMENT_ID` | | shown in `/health` |
 
 typepper's own variables are prefixed `TYPEPPER_`.
@@ -166,8 +168,34 @@ sequenceDiagram
 - Re-linking a key moves it to the new account; linking again after a GitHub
   rename updates the login, keeping the player.
 
-Web login (GitHub OAuth, server-side sessions) isn't built yet; see the
-[roadmap](roadmap.md).
+## Web login
+
+A browser is known by a session cookie, from logging in through typepper's
+GitHub App (callback `https://api.typepper.com/auth/callback`, no
+permissions: it only reads who you are).
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as Server
+    participant GH as GitHub
+    B->>S: GET /auth/github
+    S-->>B: typepper_state cookie, off to GitHub
+    B->>GH: authorize
+    GH-->>B: back to /auth/callback?code&state
+    B->>S: GET /auth/callback (state cookie)
+    S->>GH: POST /login/oauth/access_token (code)
+    S->>GH: GET api.github.com/user (token, then dropped)
+    S->>S: upsert player (github_id), new session
+    S-->>B: typepper_session cookie, to typepper.com/?login=<login>
+```
+
+- The session's secret is 32 random bytes; `sessions` keeps only its
+  SHA-256, so the table alone signs no one in. Sessions last until logout.
+- `/v1/me/runs` refuses a submission with no live session (`signed-out`)
+  instead of storing it anonymously, so the game keeps those rounds.
+- The player upsert is the one linking uses: a player who links a key and
+  logs in on the web is one player.
 
 ## Boards
 
@@ -228,10 +256,11 @@ table. Entries older than an hour are forgotten at each call.
 
 | Test | Needs |
 |---|---|
-| base62 round trips, the share page's text, the quota, GitHub login rules, the health body | nothing |
+| base62 round trips, the share page's text, the quota, GitHub login rules, the health body, reading cookies and `state` | nothing |
 | a submission end to end (two replays, a wrong claim, junk, an old engine) | Postgres |
 | a forced id collision retries | Postgres |
 | link, relink after a rename, unlink | Postgres |
+| a session signs in, is looked up, and signs out | Postgres |
 | boards: best per player, periods, ties, anonymous runs; the sweep keeps exactly what boards need | Postgres |
 
 The Postgres tests run when `TYPEPPER_TEST_DATABASE_URL` is set, migrating

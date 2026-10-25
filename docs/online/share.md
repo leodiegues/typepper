@@ -23,8 +23,9 @@ The round's replay: the mode, and every key you pressed with its time. The
 server plays it back to score it, so a shared score is the real one. No
 account, no name: an unlinked share is anonymous.
 
-Linked? Your rounds go up on their own, under your login (see
-[link your key](link.md)), and u only retries one that couldn't.
+Linked, or logged in in the browser? Your rounds go up on their own, under
+your login (see [link your key](link.md)), and u only retries one that
+couldn't.
 
 ## How long a link lasts
 

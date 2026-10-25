@@ -25,6 +25,7 @@ nothing blocks the game.
 | ←/→ on the results screen | `v1 board`, opening the strip at today, then each period | `online` on, not a touch screen |
 | `b` on the menu or the results screen, and each period after | `v1 board` | `online` on |
 | `typepper link` / `unlink` | `v1 link` / `v1 unlink` | run by hand, in the terminal |
+| `l` on the boards, on the web | off to `/auth/github`, or `POST /auth/logout` | pressed |
 | `?replay=<id>` on the web | `GET /v1/runs/<id>` | the URL asks for it |
 
 Never at startup, never while playing, never retried in the background.
@@ -43,7 +44,9 @@ impl Call {
 pub fn submission(replay: &[u8], claimed: Option<f64>) -> Vec<u8>;
 pub fn answer(line: &str) -> Result<String, String>;           // a link (and rank), or why not
 pub fn rows(text: &str) -> Result<Vec<Row>, String>;            // a board
-// desktop: account(), link(), unlink(), outbox_add(), outbox(), outbox_settle()
+pub fn account() -> Option<String>;                             // linked, or logged in on the web
+pub fn outbox_add(..); pub fn outbox() -> ..; pub fn outbox_settle(..);
+// desktop: link(), unlink()   web: log_in(), log_out(), arrived() (reads ?login=)
 ```
 
 `App::tick` polls every frame; the answer lands whenever it lands.
@@ -80,7 +83,13 @@ agent may ask as it likes.
 
 `fetch` through `spawn_local`; the answer lands in a slot that `poll` takes.
 Submitting copies the link to the clipboard (a canvas has no text to select).
-The web is anonymous for now: no account, no outbox.
+Logged in, it submits to `/v1/me/runs`, and every call carries the session
+cookie (`credentials: include`). An `err signed-out` answer forgets
+`account`; the outbox keeps its rounds for the next login. **l** on the
+boards logs in (the page goes to `/auth/github` and comes back with
+`?login=<login>`, kept as `account` and taken out of the address) or out.
+Rounds played logged out never join the outbox: on a shared browser, the
+next person to log in would claim them.
 
 ## Sharing and saving
 
@@ -166,9 +175,9 @@ Under the data dir (`$XDG_DATA_HOME/typepper/`, else
 | `bests` | personal bests, `<mode name>=<value>` lines (`HOT PURSUIT from lv7=31`) |
 | `settings` | theme, effects, font (web), `online=on/off` |
 | `last.replay` | the last round played, hex (for `--replay`) |
-| `account` | the linked GitHub login (desktop) |
+| `account` | the linked (desktop) or logged-in (web) GitHub login |
 | `known_hosts` | the server's host key, rewritten before each ssh call (desktop) |
-| `outbox/<unix ms>` | rounds waiting to go up, hex (desktop, linked) |
+| `outbox/<unix ms>` | rounds waiting to go up, hex (linked, or logged in) |
 
 ## Flags and overrides
 
@@ -181,5 +190,6 @@ Under the data dir (`$XDG_DATA_HOME/typepper/`, else
 | `TYPEPPER_SSH=host:port` | another SSH server (a local one: `localhost:2222`) |
 | `TYPEPPER_SSH_KNOWN_HOST="ssh-ed25519 AAAA…"` | the host key to expect there |
 | web `?replay=<id>` | play a shared round first |
+| web `?login=<login>` | back from logging in (the server sends it) |
 | web `?api=http://localhost:8080` | another API (with `trunk serve`) |
 | web `?demo`, `?flawless`, `?light`, `?dark`, `?touch` | the bot, themes, touch mode |

@@ -18,6 +18,8 @@ release = false
 [dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
 rand = "0.10.3"
+# sha256 for session secrets; already built for russh
+ring = "0.17.14"
 russh = { version = "0.64.1", default-features = false, features = ["ring", "rsa"] }
 serde_json = "1.0.154"
 # migrate: the migrations are compiled in (no database needed to build)

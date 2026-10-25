@@ -34,10 +34,13 @@ for checking the door is open.
 | SSH (`ssh -p 36080 -l typepper ssh.typepper.com …`) | HTTP (`https://api.typepper.com`) | Does |
 |---|---|---|
 | `v1 submit`, submission on stdin | `POST /v1/runs`, submission as the body | plays and stores each replay; ranks it if the caller is a linked player |
+| | `POST /v1/me/runs`, with the session cookie | the same, as the logged-in player; no session: `err signed-out` (401) |
 | `v1 board <mode> <period>` | `GET /v1/boards/{mode}?period=<period>` | a leaderboard |
 | `v1 whoami` | | `ok <login>`, or `ok anonymous` |
 | `ssh -l <github-login> … v1 link` | | links the key that logged in to that GitHub account |
 | `v1 unlink` | | lets go of the key that logged in |
+| | `GET /auth/github` | web login (see [browsers](#browsers)) |
+| | `POST /auth/logout` | ends the browser's session |
 | | `GET /v1/runs/{id}` | a stored replay's bytes |
 | | `GET https://r.typepper.com/{id}` | a run's share page |
 | `ping` | `GET /health` | `pong`; readiness |
@@ -97,11 +100,12 @@ err bad-replay truncated
 | `too-big` | a replay over 1 MiB, or more than a submission over SSH | drops it |
 | `too-many` | past the 20th item | keeps it |
 | `busy` | the server couldn't store it right now | keeps it |
+| `signed-out` | `/v1/me/runs` without a live session (logged out, expired, cleared); the whole submission | keeps it, and forgets the login |
 | `rate-limited` | over the caller's hourly allowance; the whole submission | keeps it |
 | no answer | the network, a timeout, the server down | keeps everything |
 
-Over HTTP, `rate-limited` comes with status 429; everything else is 200, with
-the outcome in the lines.
+Over HTTP, `rate-limited` comes with status 429 and `signed-out` with 401;
+everything else is 200, with the outcome in the lines.
 
 ## Boards
 
@@ -112,8 +116,8 @@ v1 board time:30 week                      GET /v1/boards/time:30?period=week
 - **`<mode>`**: a `Mode::key` (`time:30`, `pursuit:7`, …).
 - **`<period>`**: `day`, `week`, `month`, `year` or `all`. Periods are UTC
   calendar spans; weeks start on Monday.
-- **The answer**: the top 20, one line each, then, over SSH for a linked
-  caller who's below the top, their own row:
+- **The answer**: the top 20, one line each, then, for a linked caller (SSH)
+  or a logged-in browser (HTTP) who's below the top, their own row:
 
 ```text
 1 131 leodiegues 2026-10-23
@@ -124,7 +128,8 @@ me 31 61 someone 2026-10-20
 
 `<rank> <score> <login> <day>`; ties share a rank and go to whoever got there
 first. An empty board is no lines. A bad mode or period:
-`err bad-board …` (404 over HTTP). HTTP boards may be 30 s old.
+`err bad-board …` (404 over HTTP). HTTP boards may be 30 s old (cached
+`private` when they carry a `me` row).
 
 ## Linking
 
@@ -182,12 +187,28 @@ snake_case.
 The web game calls `api.typepper.com` from `typepper.com`. CORS allows
 `https://typepper.com` and local `http://localhost:*` / `http://127.0.0.1:*`
 origins (for `trunk serve`), for `GET` and `POST` with a `content-type`
-header. No cookies yet: the web is anonymous until web login exists.
+header, with credentials.
+
+Web login goes through typepper's GitHub App:
+
+1. `GET /auth/github` sets a `typepper_state` cookie (10 minutes) and sends
+   the browser to GitHub.
+2. GitHub sends it back to `GET /auth/callback?code=…&state=…`. A `state`
+   that isn't the cookie's is refused (400). The server trades the code for
+   a token, asks `GET /user` who it is, and drops the token.
+3. The browser gets a `typepper_session` cookie (HttpOnly, Secure,
+   SameSite=Lax, host-only, 400 days) and goes back to
+   `https://typepper.com/?login=<login>`.
+
+With that cookie, `/v1/me/runs` submits as the player and boards add their
+`me` row. `POST /auth/logout` ends it. Turned down at GitHub, the callback
+just goes back to the game.
 
 ## Limits
 
 - 20 replays a submission, 1 MiB each; a mode key of at most 32 bytes.
-- **60 submissions an hour per caller**: an ssh key's fingerprint, else the
-  connection's address (HTTP: the first `x-forwarded-for` address).
+- **60 submissions an hour per caller**: an ssh key's fingerprint, a
+  logged-in browser's player, else the connection's address (HTTP: the first
+  `x-forwarded-for` address).
 - An SSH session idle for 30 s is closed; the game gives up on a call after
   20 s.

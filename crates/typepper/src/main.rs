@@ -231,6 +231,8 @@ fn main() {
         {
             let _ = JsFuture::from(load).await;
         }
+        // back from logging in with GitHub?
+        online::arrived();
         let watch = match shared_replay() {
             Some(id) => online::fetch(&id)
                 .await

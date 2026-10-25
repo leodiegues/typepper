@@ -3753,6 +3753,7 @@ version = "0.5.0"
 dependencies = [
  "axum",
  "rand 0.10.3",
+ "ring",
  "russh",
  "serde_json",
  "sqlx",

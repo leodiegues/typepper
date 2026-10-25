@@ -262,6 +262,15 @@ impl App {
             }
             (Screen::Boards(b), Key::Left) => b.step(-1),
             (Screen::Boards(b), Key::Right) => b.step(1),
+            // the web logs in (or out) here; the terminal links with `typepper link`
+            #[cfg(target_arch = "wasm32")]
+            (Screen::Boards(b), Key::Char('l')) => match self.account.take() {
+                Some(_) => {
+                    online::log_out();
+                    b.step(0);
+                }
+                None => online::log_in(),
+            },
             (Screen::Boards(_), _) => {}
             (Screen::Title, _) => {}
             (Screen::Play(r), key) => match key {
@@ -284,6 +293,8 @@ impl App {
             && let Ok(up) = &mut share.state
             && let Some(answer) = up.poll()
         {
+            // a web session can end under it (the answer says so)
+            self.account = online::account();
             share.state = Err(answer.and_then(|text| {
                 online::outbox_settle(&share.outbox, &text);
                 // this round is the last one sent

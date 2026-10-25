@@ -34,6 +34,10 @@ export default defineRailway(() => {
       TYPEPPER_DATABASE_URL: db.env.DATABASE_URL,
       // an OpenSSH private key, set once in Railway; the game ships its public half
       TYPEPPER_SSH_HOST_KEY: preserve(),
+      // the GitHub App web login goes through (callback:
+      // https://api.typepper.com/auth/callback), set once in Railway
+      TYPEPPER_GITHUB_CLIENT_ID: preserve(),
+      TYPEPPER_GITHUB_CLIENT_SECRET: preserve(),
     },
   });
 
