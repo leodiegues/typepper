@@ -35,7 +35,7 @@ could hurt real players' data: a `ctx.environment` branch in `railway.ts`, a
 |---|---|
 | `typepper-server` | built from `infra/docker/typepper-server.Dockerfile`; health check `/health`; domains `api.typepper.com` and `r.typepper.com` (port 8080); TCP proxy to 2222; 2 vCPU / 2 GB; variables `PORT`, `TYPEPPER_SSH_PORT`, `TYPEPPER_DATABASE_URL` (a reference), `TYPEPPER_SSH_HOST_KEY` (`preserve()`: set in Railway, never in the repo) |
 | `typepper-postgres` | Postgres 18; 2 vCPU / 2 GB |
-| `typepper-docs` | built from `infra/docker/typepper-docs.Dockerfile` (`site/prepare.py`, Zola, then static-web-server); health check `/`; domain `docs.typepper.com` (port 8080), once registered; variable `PORT` |
+| `typepper-docs` | built from `infra/docker/typepper-docs.Dockerfile` (`site/prepare.py`, Zola, then static-web-server); 0.5 vCPU / 1 GB; health check `/`; domain `docs.typepper.com` (port 8080); variable `PORT` |
 
 - **The service has no GitHub source.** Railway never deploys on its own; only
   `railway up` from CI does.

@@ -44,9 +44,12 @@ export default defineRailway(() => {
       builder: "DOCKERFILE",
       dockerfilePath: "infra/docker/typepper-docs.Dockerfile",
     },
+    // as set in the dashboard: static files need little
+    deploy: { limitOverride: { containers: { cpu: 0.5, memoryBytes: 1_000_000_000 } } },
     healthcheck: "/",
-    // docs.typepper.com: register it with `railway domain docs.typepper.com
-    // -p 8080 -s typepper-docs`, then list it here like the server's
+    // added with `railway domain docs.typepper.com -p 8080 -s typepper-docs`,
+    // listed here so applies keep it
+    domains: [{ domain: "docs.typepper.com", port: 8080 }],
     env: {
       PORT: "8080",
     },
