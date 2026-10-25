@@ -106,6 +106,8 @@ pub struct App {
     account: Option<String>,
     /// The boards beside the results chart, once opened.
     strip: Option<Boards>,
+    /// A logged-in browser's bests from the server, on their way.
+    synced: Option<Call>,
 }
 
 impl App {
@@ -124,6 +126,13 @@ impl App {
             }),
             None => Screen::Title,
         };
+        let account = online::account();
+        // logged in on the web: bests set in the terminal show here too. In
+        // the background: nothing waits on it, and a failure changes nothing
+        #[cfg(target_arch = "wasm32")]
+        let synced = (!settings.offline && account.is_some()).then(Call::bests);
+        #[cfg(not(target_arch = "wasm32"))]
+        let synced = None;
         App {
             screen,
             menu: Menu::new(now),
@@ -141,8 +150,9 @@ impl App {
             fade: None,
             share: None,
             screens: 0,
-            account: online::account(),
+            account,
             strip: None,
+            synced,
         }
     }
 
@@ -332,6 +342,13 @@ impl App {
         }
         if let Some(b) = &mut self.strip {
             b.tick();
+        }
+        if let Some(answer) = self.synced.as_mut().and_then(Call::poll) {
+            self.synced = None;
+            if let Ok(text) = answer {
+                self.bests.merge(&text);
+            }
+            self.account = online::account();
         }
         let mut next = None;
         // demo: take the suggested starting level after a moment

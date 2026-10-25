@@ -31,7 +31,8 @@ Press **l** on the title screen, the boards, or after a round to log in
 with GitHub. GitHub asks once to
 authorize typepper, which reads only your public profile. You come back
 logged in, and your rounds go up as you, just like a linked terminal game.
-**l** again logs out.
+Your bests from the terminal show on the mode cards too, a moment after the
+game opens (only rounds that went up count). **l** again logs out.
 
 If the login runs out (or you clear the site's data), your next rounds wait
 in the browser until you log in again. Rounds played while logged out stay

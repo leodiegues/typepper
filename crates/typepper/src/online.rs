@@ -1,7 +1,8 @@
 //! The game's one door to typepper.com: replays go up, links come back.
 //! Only ever on the player's say-so (pressing u, or having linked their
-//! account), never at startup or while playing, and a failure is one line of
-//! text. Desktop runs the system `ssh`, where a linked key is who the player
+//! account), and a failure is one line of text. The one call they don't
+//! make, a logged-in browser fetching its bests, is never waited on, and its
+//! failure changes nothing (docs/built/decisions.md, 1). Desktop runs the system `ssh`, where a linked key is who the player
 //! is; the web uses fetch, where a session cookie from logging in with GitHub
 //! is. See docs/built/game-client.md.
 
@@ -380,6 +381,26 @@ mod imp {
                 *done.borrow_mut() = Some(get_text(&url).await);
             });
             Ok(Call(slot))
+        }
+
+        /// The logged-in player's bests on the server (`<mode> <score>`
+        /// lines), the terminal's rounds included.
+        pub fn bests() -> Call {
+            let slot = Slot::default();
+            let done = slot.clone();
+            let url = format!("{}/v1/me/bests", api());
+            wasm_bindgen_futures::spawn_local(async move {
+                let answer = get_text(&url).await;
+                // the session's gone: logged out here too
+                if answer
+                    .as_deref()
+                    .is_ok_and(|t| t.starts_with("err signed-out "))
+                {
+                    store::remove("account");
+                }
+                *done.borrow_mut() = Some(answer);
+            });
+            Call(slot)
         }
 
         pub fn poll(&mut self) -> Option<Result<String, String>> {

@@ -9,11 +9,14 @@ decided, what it beat, and what it costs. Newest last.
 
 ## 1. Online is opt-in; offline is the product
 
-The game makes no network call at startup or during play. Sharing, boards and
-uploads happen only on the player's action (or because they linked), fail as
-one dim line, and `online: off` removes them. **Instead of** accounts at
-startup, background sync, or update checks. **Cost:** no telemetry, and
-features have to be designed around an action the player takes.
+The game makes no network call until the player opts in: sharing, the
+boards, `typepper link`, or logging in on the web. After that, a call the
+player didn't ask for (a logged-in browser fetching its bests) never stands
+between them and a round: the game starts without waiting on it, and its
+failure changes nothing. Calls the player makes fail as one dim line, and
+`online: off` removes them all. **Instead of** accounts at startup,
+telemetry, or update checks. **Cost:** features have to be designed around
+an action the player took.
 
 ## 2. Replays are inputs, not video
 

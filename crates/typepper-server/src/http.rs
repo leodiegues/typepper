@@ -43,6 +43,7 @@ pub async fn serve(db: PgPool, quota: Arc<Quota>, port: u16) -> std::io::Result<
         .route("/health", get(health))
         .route("/v1/runs", post(submit))
         .route("/v1/me/runs", post(submit_mine))
+        .route("/v1/me/bests", get(my_bests))
         .route("/auth/github", get(login))
         .route("/auth/callback", get(callback))
         .route("/auth/logout", post(logout))
@@ -83,6 +84,32 @@ async fn submit_mine(State(cx): State<Ctx>, headers: HeaderMap, body: Bytes) -> 
         Ok(Some((player, _))) => store(&cx, &format!("player {player}"), Some(player), &body).await,
         Ok(None) => (StatusCode::UNAUTHORIZED, "err signed-out log in again\n").into_response(),
         Err(code) => code.into_response(),
+    }
+}
+
+/// `GET /v1/me/bests`: a logged-in browser's best in each mode, from every
+/// round of theirs on the server (the terminal's too).
+async fn my_bests(State(cx): State<Ctx>, headers: HeaderMap) -> Response {
+    let player = match session(&cx, &headers).await {
+        Ok(Some((player, _))) => player,
+        Ok(None) => {
+            return (StatusCode::UNAUTHORIZED, "err signed-out log in again\n").into_response();
+        }
+        Err(code) => return code.into_response(),
+    };
+    match board::bests(&cx.db, player).await {
+        Ok(text) => (
+            [
+                (CONTENT_TYPE, "text/plain; charset=utf-8"),
+                (CACHE_CONTROL, "private, no-store"),
+            ],
+            text,
+        )
+            .into_response(),
+        Err(e) => {
+            eprintln!("bests: {e}");
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
     }
 }
 

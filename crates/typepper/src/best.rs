@@ -62,6 +62,34 @@ impl Bests {
         }
         Some(out)
     }
+
+    /// Takes in bests from elsewhere (`<mode key> <value>` lines, as the
+    /// server sends a logged-in player's), keeping the higher of each.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub fn merge(&mut self, text: &str) {
+        if self.merged(text) {
+            // ponytail: a failed save only loses them until the next load
+            let _ = store::write("bests", &self.to_text());
+        }
+    }
+
+    /// `merge`, without saving: whether anything changed.
+    fn merged(&mut self, text: &str) -> bool {
+        let mut changed = false;
+        for line in text.lines() {
+            let Some((k, v)) = line.split_once(' ') else {
+                continue;
+            };
+            let (Some(m), Ok(v)) = (Mode::parse(k), v.trim().parse::<f64>()) else {
+                continue;
+            };
+            if v.is_finite() && self.get(m).is_none_or(|was| v > was) {
+                self.0.insert(key(m), v);
+                changed = true;
+            }
+        }
+        changed
+    }
 }
 
 /// Bests are kept per mode, and per starting level when it isn't 1 (so a
@@ -107,6 +135,16 @@ mod tests {
         assert_eq!(b.get(from(7)), Some(31.0));
         assert_eq!(b.get(from(1)), None);
         assert_eq!(show(from(1), 3.0), "3 words");
+    }
+
+    #[test]
+    fn merging_keeps_the_higher_of_each() {
+        let mut b = Bests::parse("BLITZ 30s=87\nSPRINT 10w=102.5\n");
+        assert!(b.merged("time:30 90\nwords:10 80\npursuit:7 31\nnope 5\nzen x\n"));
+        assert_eq!(b.get(Mode::Time(30)), Some(90.0));
+        assert_eq!(b.get(Mode::Words(10)), Some(102.5));
+        assert_eq!(b.get(Mode::Pursuit { start_level: 7 }), Some(31.0));
+        assert!(!b.merged("time:30 90\nerr signed-out log in again\n"));
     }
 
     #[test]

@@ -27,8 +27,12 @@ nothing blocks the game.
 | `typepper link` / `unlink` | `v1 link` / `v1 unlink` | run by hand, in the terminal |
 | `l` on the boards, on the web | off to `/auth/github`, or `POST /auth/logout` | pressed |
 | `?replay=<id>` on the web | `GET /v1/runs/<id>` | the URL asks for it |
+| starting the web game | `GET /v1/me/bests` | logged in, `online` on |
 
-Never at startup, never while playing, never retried in the background.
+Nothing else at startup, never while playing, never retried in the
+background. The bests fetch isn't waited on: the game starts at once, a
+best the server has and the browser doesn't (or a higher one) is kept as it
+arrives, and a failure changes nothing.
 
 ## `online.rs`
 
@@ -89,7 +93,9 @@ cookie (`credentials: include`). An `err signed-out` answer forgets
 boards logs in (the page goes to `/auth/github` and comes back with
 `?login=<login>`, kept as `account` and taken out of the address) or out.
 Rounds played logged out never join the outbox: on a shared browser, the
-next person to log in would claim them.
+next person to log in would claim them. Logged in, the game asks
+`/v1/me/bests` as it starts, and `Bests::merge` keeps the higher of each
+mode's best, so bests set in the terminal show on the mode cards.
 
 ## Sharing and saving
 

@@ -196,6 +196,8 @@ sequenceDiagram
   SHA-256, so the table alone signs no one in. Sessions last until logout.
 - `/v1/me/runs` refuses a submission with no live session (`signed-out`)
   instead of storing it anonymously, so the game keeps those rounds.
+- `/v1/me/bests` is the player's best score in each mode, from all their
+  runs (a linked terminal's too); the sweep always keeps each one.
 - The player upsert is the one linking uses: a player who links a key and
   logs in on the web is one player.
 

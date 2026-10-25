@@ -35,6 +35,7 @@ for checking the door is open.
 |---|---|---|
 | `v1 submit`, submission on stdin | `POST /v1/runs`, submission as the body | plays and stores each replay; ranks it if the caller is a linked player |
 | | `POST /v1/me/runs`, with the session cookie | the same, as the logged-in player; no session: `err signed-out` (401) |
+| | `GET /v1/me/bests`, with the session cookie | the logged-in player's best in each mode, `<mode> <score>` lines; no session: `err signed-out` (401) |
 | `v1 board <mode> <period>` | `GET /v1/boards/{mode}?period=<period>` | a leaderboard |
 | `v1 whoami` | | `ok <login>`, or `ok anonymous` |
 | `ssh -l <github-login> … v1 link` | | links the key that logged in to that GitHub account |
@@ -100,7 +101,7 @@ err bad-replay truncated
 | `too-big` | a replay over 1 MiB, or more than a submission over SSH | drops it |
 | `too-many` | past the 20th item | keeps it |
 | `busy` | the server couldn't store it right now | keeps it |
-| `signed-out` | `/v1/me/runs` without a live session (logged out, expired, cleared); the whole submission | keeps it, and forgets the login |
+| `signed-out` | `/v1/me/runs` or `/v1/me/bests` without a live session (logged out, expired, cleared); the whole submission | keeps it, and forgets the login |
 | `rate-limited` | over the caller's hourly allowance; the whole submission | keeps it |
 | no answer | the network, a timeout, the server down | keeps everything |
 
@@ -200,8 +201,8 @@ Web login goes through typepper's GitHub App:
    SameSite=Lax, host-only, 400 days) and goes back to
    `https://typepper.com/?login=<login>`.
 
-With that cookie, `/v1/me/runs` submits as the player and boards add their
-`me` row. `POST /auth/logout` ends it. Turned down at GitHub, the callback
+With that cookie, `/v1/me/runs` submits as the player, `/v1/me/bests` gives
+their bests, and boards add their `me` row. `POST /auth/logout` ends it. Turned down at GitHub, the callback
 just goes back to the game.
 
 ## Limits

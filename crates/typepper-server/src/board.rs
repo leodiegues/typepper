@@ -119,6 +119,22 @@ pub async fn rank(db: &PgPool, mode: Mode, player: i64) -> sqlx::Result<Option<i
     .await
 }
 
+/// `player`'s best in each mode, as `<mode> <score>` lines (the web merges
+/// them into its own bests, so rounds played in the terminal count there too).
+pub async fn bests(db: &PgPool, player: i64) -> sqlx::Result<String> {
+    // ponytail: no index leads with player_id (the sweep keeps runs few); add
+    // one if this shows up as slow
+    let rows: Vec<(String, f64)> = sqlx::query_as(
+        "select mode, max(score) from runs
+         where player_id = $1 and score is not null
+         group by mode order by mode",
+    )
+    .bind(player)
+    .fetch_all(db)
+    .await?;
+    Ok(rows.iter().map(|(m, s)| format!("{m} {s}\n")).collect())
+}
+
 /// A board as text, one line per row (`<rank> <score> <login> <day>`), then
 /// the caller's own row as `me …` when it's below the top. Over SSH and HTTP.
 pub fn text(top: &[Entry], me: Option<&Entry>) -> String {
@@ -218,6 +234,7 @@ mod tests {
         assert_eq!(rank(&db, mode, c).await.unwrap(), Some(3));
         assert_eq!(rank(&db, Mode::Zen, c).await.unwrap(), None);
         assert!(text(&top, None).starts_with("1 40 bob "));
+        assert_eq!(bests(&db, a).await.unwrap(), format!("{} 50\n", mode.key()));
     }
 
     #[tokio::test]

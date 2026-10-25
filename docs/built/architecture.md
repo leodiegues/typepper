@@ -10,10 +10,11 @@ map; each part has its own doc.
 
 ## Principles
 
-1. **Offline first.** The game never needs the network. Nothing is sent at
-   startup or while playing; the first possible contact is a finished round,
-   and only because the player asked (pressing `u`, opening the boards, or
-   having linked their account). A network failure is one dim line of text,
+1. **Offline first.** The game never needs the network. Nothing is sent
+   until the player asks (pressing `u`, opening the boards, or having linked
+   their account or logged in). The one call they don't make, a logged-in
+   browser fetching its bests at startup, is never waited on, and its
+   failure changes nothing. A network failure is one dim line of text,
    never a dialog, and never blocks a key. **settings → online: off** turns
    every online feature and hint off.
 2. **One set of rules.** The game, the browser and the server run the same
