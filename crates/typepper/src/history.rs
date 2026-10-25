@@ -149,14 +149,14 @@ impl History {
 /// `status`: how sharing the picked round is going, if it is.
 pub fn draw(f: &mut Frame, h: &History, status: Option<&str>, online: bool) {
     let col = ui::column(f.area());
-    let [_, title, _, note, _, table, _, help] = Layout::vertical([
+    let [_, title, _, note, above, table, below, help] = Layout::vertical([
         Constraint::Fill(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(SHOWN as u16),
-        Constraint::Fill(1),
+        Constraint::Min(1),
         Constraint::Length(1),
     ])
     .areas(col);
@@ -170,6 +170,14 @@ pub fn draw(f: &mut Frame, h: &History, status: Option<&str>, online: bool) {
     }
     // a window around the picked round
     let from = h.sel.saturating_sub(SHOWN - 1);
+    // ⋯ where rounds are out of sight
+    let mut more = |area| f.render_widget(Line::from("⋯".dark_gray()).centered(), area);
+    if from > 0 {
+        more(above);
+    }
+    if from + SHOWN < h.rounds.len() {
+        more(Rect { height: 1, ..below });
+    }
     let now = boards::unix_now();
     let lines: Vec<Line> = (h.rounds.iter().enumerate().skip(from).take(SHOWN))
         .map(|(i, r)| {
