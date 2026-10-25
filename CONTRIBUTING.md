@@ -73,6 +73,28 @@ with `<login>.keys` (your public key) and `users/<login>` (`{"id": 1,
 "login": "<login>"}`) with `python3 -m http.server 8765`, and start the server
 with `TYPEPPER_GITHUB=http://127.0.0.1:8765`.
 
+Web login against a local server goes through the real GitHub App:
+
+1. Once, on the app (github.com → Settings → Developer settings → GitHub
+   Apps → typepper → General): **Add callback URL**
+   `http://localhost:8080/auth/callback`, under the production one (the
+   first stays the default).
+2. Put the app's id and secret in `mise.local.toml` (gitignored):
+
+   ```toml
+   [env]
+   TYPEPPER_GITHUB_CLIENT_ID = "Iv23li…"
+   TYPEPPER_GITHUB_CLIENT_SECRET = "…"
+   ```
+
+3. `mise run server`, `trunk serve --port 8090`, and open
+   `http://localhost:8090/?api=http://localhost:8080`: **localhost** both,
+   not 127.0.0.1, or the session cookie counts as another site's and isn't
+   sent. Use Chrome or Firefox: Safari may drop a `Secure` cookie over http.
+
+`TYPEPPER_WEB` and `TYPEPPER_GITHUB_CALLBACK` (set by the task) send GitHub
+and the player back to these local addresses.
+
 ### The docs site
 
 ```sh

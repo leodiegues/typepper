@@ -122,6 +122,28 @@ pub fn outbox_settle(names: &[String], answer: &str) {
     }
 }
 
+/// A query's `login=` (if it's one GitHub could have), and the address
+/// without it: `/`, or `/?` and the rest.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+fn login_in(query: &str) -> (Option<String>, String) {
+    let (logins, rest): (Vec<&str>, Vec<&str>) = query
+        .trim_start_matches('?')
+        .split('&')
+        .filter(|kv| !kv.is_empty())
+        .partition(|kv| kv.starts_with("login="));
+    // only what a GitHub login can be: it shows on screen, nothing more
+    let login = logins
+        .first()
+        .map(|kv| &kv["login=".len()..])
+        .filter(|l| (1..=39).contains(&l.len()))
+        .filter(|l| l.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'));
+    let rest = match rest.is_empty() {
+        true => "/".to_string(),
+        false => format!("/?{}", rest.join("&")),
+    };
+    (login.map(str::to_string), rest)
+}
+
 /// Whether one line of an answer settles its replay: stored, or never will
 /// be (too old, broken, too big). Anything else (busy, rate-limited, signed
 /// out, no line at all) keeps it for the next try.
@@ -389,23 +411,14 @@ mod imp {
     pub fn arrived() {
         let Some(w) = web_sys::window() else { return };
         let query = w.location().search().unwrap_or_default();
-        let Some(login) = query
-            .trim_start_matches('?')
-            .split('&')
-            .find_map(|kv| kv.strip_prefix("login="))
-        else {
+        let (Some(login), rest) = super::login_in(&query) else {
             return;
         };
-        // only what a GitHub login can be: it shows on screen, nothing more
-        let ok = (1..=39).contains(&login.len())
-            && login
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-');
-        if ok {
-            let _ = store::write("account", login);
-        }
+        let _ = store::write("account", &login);
+        // the rest (a local `?api=`) stays
         if let Ok(h) = w.history() {
-            let _ = h.replace_state_with_url(&web_sys::wasm_bindgen::JsValue::NULL, "", Some("/"));
+            let _ =
+                h.replace_state_with_url(&web_sys::wasm_bindgen::JsValue::NULL, "", Some(&rest));
         }
     }
 
@@ -509,6 +522,20 @@ mod tests {
             answer(saved),
             Ok("r.typepper.com/x7Kp2QaZ · #14 all time".into())
         );
+    }
+
+    #[test]
+    fn coming_back_from_github_keeps_the_rest() {
+        assert_eq!(
+            login_in("?api=http://localhost:8080&login=Octo-Cat"),
+            (
+                Some("Octo-Cat".into()),
+                "/?api=http://localhost:8080".into()
+            )
+        );
+        assert_eq!(login_in("?login=a"), (Some("a".into()), "/".into()));
+        assert_eq!(login_in("?login=<b>"), (None, "/".into()), "not a login");
+        assert_eq!(login_in("?replay=x7Kp2QaZ").0, None);
     }
 
     #[test]

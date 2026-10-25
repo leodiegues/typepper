@@ -56,6 +56,8 @@ database at runtime, so building needs no database.
 | `TYPEPPER_SSH_PORT` | 2222 | SSH (the TCP proxy's target) |
 | `TYPEPPER_GITHUB` | GitHub | points the GitHub calls at a stand-in, for tests |
 | `TYPEPPER_GITHUB_CLIENT_ID`, `TYPEPPER_GITHUB_CLIENT_SECRET` | | the GitHub App web login goes through; unset, `/auth/*` answers "login isn't set up" |
+| `TYPEPPER_WEB` | `https://typepper.com/` | where a login goes back to (`mise run server`: the local game, with its `?api=`) |
+| `TYPEPPER_GITHUB_CALLBACK` | the app's first callback URL | sent to GitHub as `redirect_uri` (`mise run server`: `http://localhost:8080/auth/callback`) |
 | `RAILWAY_DEPLOYMENT_ID` | | shown in `/health` |
 
 typepper's own variables are prefixed `TYPEPPER_`.

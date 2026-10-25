@@ -34,14 +34,21 @@ pub async fn user(login: &str) -> Result<(i64, String), String> {
 }
 
 /// Web login: who signed in at GitHub, from the `code` it sent them back
-/// with. The token is used once, here, and never kept.
-pub async fn signed_in(client_id: &str, secret: &str, code: &str) -> Result<(i64, String), String> {
+/// with (to `callback`, when it isn't the app's first callback URL). The
+/// token is used once, here, and never kept.
+pub async fn signed_in(
+    client_id: &str,
+    secret: &str,
+    code: &str,
+    callback: Option<&str>,
+) -> Result<(i64, String), String> {
     let url = format!("{}/login/oauth/access_token", web());
-    let form = [
+    let mut form = vec![
         ("client_id", client_id.to_string()),
         ("client_secret", secret.to_string()),
         ("code", code.to_string()),
     ];
+    form.extend(callback.map(|c| ("redirect_uri", c.to_string())));
     let answer: serde_json::Value =
         serde_json::from_str(&call(url, None, Some(form)).await?).map_err(|e| e.to_string())?;
     // a bad or used code still answers 200, with an `error`
@@ -75,7 +82,7 @@ async fn get(url: String, token: Option<String>) -> Result<String, String> {
 async fn call(
     url: String,
     token: Option<String>,
-    form: Option<[(&'static str, String); 3]>,
+    form: Option<Vec<(&'static str, String)>>,
 ) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         let agent: ureq::Agent = ureq::Agent::config_builder()

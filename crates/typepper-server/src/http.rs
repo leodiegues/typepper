@@ -57,8 +57,6 @@ pub async fn serve(db: PgPool, quota: Arc<Quota>, port: u16) -> std::io::Result<
     axum::serve(listener, app).await
 }
 
-/// Where the web game is: logins go back there.
-const WEB: &str = "https://typepper.com";
 /// The cookies: a session's secret, and a login's `state` on its way through
 /// GitHub. Host-only (no `Domain`): only api.typepper.com reads them.
 const SESSION: &str = "typepper_session";
@@ -123,11 +121,32 @@ fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
 
 /// The GitHub App's client id and secret, set in Railway.
 fn github_app() -> Option<(String, String)> {
-    let var = |k| std::env::var(k).ok().filter(|v: &String| !v.is_empty());
     Some((
         var("TYPEPPER_GITHUB_CLIENT_ID")?,
         var("TYPEPPER_GITHUB_CLIENT_SECRET")?,
     ))
+}
+
+/// Where the web game is, logins go back to: typepper.com, or
+/// `TYPEPPER_WEB` (a local one, with its `?api=`).
+fn web() -> String {
+    var("TYPEPPER_WEB").unwrap_or("https://typepper.com/".into())
+}
+
+/// Where GitHub sends players back: the app's first callback URL, or
+/// `TYPEPPER_GITHUB_CALLBACK` (a local server's, also registered on the app).
+fn callback_url() -> Option<String> {
+    var("TYPEPPER_GITHUB_CALLBACK")
+}
+
+fn var(k: &str) -> Option<String> {
+    std::env::var(k).ok().filter(|v| !v.is_empty())
+}
+
+/// The game's address with `login=<login>` added to its query.
+fn with_login(web: &str, login: &str) -> String {
+    let sep = if web.contains('?') { '&' } else { '?' };
+    format!("{web}{sep}login={login}")
 }
 
 /// `GET /auth/github`: off to GitHub to log in, with a `state` to check on
@@ -144,7 +163,10 @@ async fn login() -> Response {
     let cookie =
         format!("{STATE}={state}; Path=/auth; Max-Age=600; HttpOnly; Secure; SameSite=Lax");
     let github = std::env::var("TYPEPPER_GITHUB").unwrap_or("https://github.com".into());
-    let to = format!("{github}/login/oauth/authorize?client_id={client_id}&state={state}");
+    let mut to = format!("{github}/login/oauth/authorize?client_id={client_id}&state={state}");
+    if let Some(back) = callback_url() {
+        to += &format!("&redirect_uri={back}");
+    }
     (AppendHeaders([(SET_COOKIE, cookie)]), Redirect::to(&to)).into_response()
 }
 
@@ -153,7 +175,7 @@ async fn login() -> Response {
 /// the game learns the login from `?login=`.
 async fn callback(State(cx): State<Ctx>, headers: HeaderMap, RawQuery(q): RawQuery) -> Response {
     let fail = |why: &str| {
-        let text = format!("couldn't log in: {why}\n\nback to the game: {WEB}/\n");
+        let text = format!("couldn't log in: {why}\n\nback to the game: {}\n", web());
         (StatusCode::BAD_REQUEST, text).into_response()
     };
     let q = q.unwrap_or_default();
@@ -163,7 +185,7 @@ async fn callback(State(cx): State<Ctx>, headers: HeaderMap, RawQuery(q): RawQue
     };
     // turned down at GitHub: back to the game, as they were
     if param("error").is_some() {
-        return Redirect::to(&format!("{WEB}/")).into_response();
+        return Redirect::to(&web()).into_response();
     }
     let Some(code) = param("code") else {
         return fail("GitHub sent no code");
@@ -174,13 +196,14 @@ async fn callback(State(cx): State<Ctx>, headers: HeaderMap, RawQuery(q): RawQue
     let Some((client_id, secret)) = github_app() else {
         return fail("login isn't set up");
     };
-    let (github_id, login) = match github::signed_in(&client_id, &secret, code).await {
-        Ok(who) => who,
-        Err(e) => {
-            eprintln!("callback: {e}");
-            return fail("GitHub didn't say who you are");
-        }
-    };
+    let (github_id, login) =
+        match github::signed_in(&client_id, &secret, code, callback_url().as_deref()).await {
+            Ok(who) => who,
+            Err(e) => {
+                eprintln!("callback: {e}");
+                return fail("GitHub didn't say who you are");
+            }
+        };
     let secret = match accounts::player(&cx.db, github_id, &login).await {
         Ok(player) => accounts::sign_in(&cx.db, player).await,
         Err(e) => Err(e),
@@ -192,7 +215,7 @@ async fn callback(State(cx): State<Ctx>, headers: HeaderMap, RawQuery(q): RawQue
     let session =
         format!("{SESSION}={secret}; Path=/; Max-Age=34560000; HttpOnly; Secure; SameSite=Lax");
     let state = format!("{STATE}=; Path=/auth; Max-Age=0");
-    let to = format!("{WEB}/?login={login}");
+    let to = with_login(&web(), &login);
     (
         AppendHeaders([(SET_COOKIE, session), (SET_COOKIE, state)]),
         Redirect::to(&to),
@@ -381,6 +404,16 @@ mod tests {
             "no cookie: not this browser's"
         );
         assert!(!state_matches(None, None));
+
+        assert_eq!(
+            with_login("https://typepper.com/", "Octo-Cat"),
+            "https://typepper.com/?login=Octo-Cat"
+        );
+        let local = "http://localhost:8090/?api=http://localhost:8080";
+        assert_eq!(
+            with_login(local, "a"),
+            "http://localhost:8090/?api=http://localhost:8080&login=a"
+        );
     }
 
     #[test]

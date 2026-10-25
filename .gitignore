@@ -35,6 +35,9 @@ rustc-ice-*.txt
 /assets/gifs/*.mp4
 .DS_Store
 
+# local secrets (the GitHub App's, for web login against a local server)
+mise.local.toml
+
 # infra/railway: npm ci fetches the Railway SDK and CLI
 node_modules/
 

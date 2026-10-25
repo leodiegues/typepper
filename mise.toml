@@ -73,6 +73,10 @@ key="${TMPDIR:-/tmp}/typepper-host-key"
 [ -f "$key" ] || ssh-keygen -q -t ed25519 -N '' -f "$key"
 echo "http://localhost:8080/health · ssh -p 2222 localhost ping"
 echo "a game that shares here: TYPEPPER_SSH=localhost:2222 TYPEPPER_SSH_KNOWN_HOST=\"\$(cat $key.pub)\" typepper"
+echo "the web game, logging in here: http://localhost:8090/?api=http://localhost:8080 (trunk serve --port 8090)"
+# web login comes back to the local game (the app's id and secret: mise.local.toml)
+TYPEPPER_WEB="${TYPEPPER_WEB:-http://localhost:8090/?api=http://localhost:8080}" \
+TYPEPPER_GITHUB_CALLBACK="${TYPEPPER_GITHUB_CALLBACK:-http://localhost:8080/auth/callback}" \
 TYPEPPER_SSH_HOST_KEY="$(cat "$key")" TYPEPPER_DATABASE_URL=postgres://postgres:typepper@localhost:55432/postgres \
   cargo run -p typepper-server
 '''
