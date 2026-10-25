@@ -11,7 +11,7 @@ set -euo pipefail
 from=$(git merge-base "${1:-HEAD^1}" HEAD) # then diff to the working tree, so local edits count
 stale=0 broken=0
 
-for doc in docs/*.md; do
+for doc in $(find docs -name '*.md' | sort); do # sections are folders
   globs=$(awk 'NR == 1 { if ($0 != "---") exit; next }
                /^---$/ { exit }
                /^ *covers:/ { c = 1; next }
