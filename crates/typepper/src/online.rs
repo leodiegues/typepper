@@ -87,6 +87,17 @@ fn settled(line: &str) -> bool {
     done.iter().any(|d| line.starts_with(d))
 }
 
+/// What ssh printed, once it's done: an answer, even an empty one (an empty
+/// board) if it exited cleanly; nothing from a failed ssh (255: no
+/// connection) is no answer at all.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+fn heard(out: String, clean: bool) -> Result<String, String> {
+    match out.is_empty() && !clean {
+        true => Err("couldn't reach typepper.com".into()),
+        false => Ok(out),
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
     use std::io::{Read, Write};
@@ -165,13 +176,10 @@ mod imp {
         /// The server's answer, once there is one (never waits).
         pub fn poll(&mut self) -> Option<Result<String, String>> {
             match self.child.try_wait() {
-                Ok(Some(_)) => {
+                Ok(Some(status)) => {
                     let mut out = String::new();
                     let _ = self.child.stdout.take()?.read_to_string(&mut out);
-                    Some(match out.is_empty() {
-                        true => Err("couldn't reach typepper.com".into()),
-                        false => Ok(out),
-                    })
+                    Some(super::heard(out, status.success()))
                 }
                 Ok(None) if self.started.elapsed() > Duration::from_secs(20) => {
                     let _ = self.child.kill();
@@ -441,6 +449,14 @@ mod tests {
             answer(saved),
             Ok("r.typepper.com/x7Kp2QaZ · #14 all time".into())
         );
+    }
+
+    #[test]
+    fn an_empty_board_is_an_answer() {
+        assert_eq!(heard(String::new(), true), Ok(String::new()));
+        assert!(heard(String::new(), false).is_err(), "ssh couldn't connect");
+        let busy = "err busy try later\n".to_string();
+        assert_eq!(heard(busy.clone(), false), Ok(busy), "the server's own err");
     }
 
     #[test]
