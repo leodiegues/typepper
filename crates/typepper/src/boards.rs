@@ -1,7 +1,8 @@
 //! The leaderboards: one mode's top 20 for today, this week, this month,
 //! this year or all time, fetched when it opens and on each period. Full
 //! screen from `b`, or as a strip beside the results chart: there it opens
-//! on ←/→, or by itself once a linked player's round is in.
+//! on ←/→, or by itself once a linked player's round is in. On the full
+//! screen, ↑/↓ picks a row and enter fetches its run to watch.
 
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
@@ -26,6 +27,12 @@ pub struct Boards {
     call: Option<Call>,
     /// None while it loads.
     rows: Option<Result<Vec<Row>, String>>,
+    /// The picked row.
+    sel: usize,
+    /// The picked row's replay, on its way.
+    fetching: Option<Call>,
+    /// Why the last enter didn't play.
+    pub note: Option<String>,
 }
 
 impl Boards {
@@ -36,13 +43,16 @@ impl Boards {
             period: 0,
             call: None,
             rows: None,
+            sel: 0,
+            fetching: None,
+            note: None,
         };
         b.fetch();
         b
     }
 
     fn fetch(&mut self) {
-        self.rows = None;
+        (self.rows, self.sel, self.note) = (None, 0, None);
         match Call::board(&self.mode.key(), PERIODS[self.period].0) {
             Ok(call) => self.call = Some(call),
             Err(why) => (self.call, self.rows) = (None, Some(Err(why))),
@@ -55,12 +65,49 @@ impl Boards {
         self.fetch();
     }
 
-    pub fn tick(&mut self) {
+    /// ↑/↓: the row above or below.
+    pub fn pick(&mut self, dir: i64) {
+        let last = self.rows().len().saturating_sub(1) as i64;
+        self.sel = (self.sel as i64 + dir).clamp(0, last) as usize;
+        self.note = None;
+    }
+
+    /// Enter: fetches the picked row's run, which `tick` hands back.
+    pub fn watch(&mut self) {
+        let Some(run) = self.rows().get(self.sel).and_then(|r| r.run.clone()) else {
+            return;
+        };
+        match Call::replay(&run) {
+            Ok(call) => (self.fetching, self.note) = (Some(call), Some("…".into())),
+            Err(why) => self.note = Some(why),
+        }
+    }
+
+    fn rows(&self) -> &[Row] {
+        match &self.rows {
+            Some(Ok(rows)) => rows,
+            _ => &[],
+        }
+    }
+
+    /// Polls the board, and the replay `watch` asked for: its bytes once
+    /// they're in.
+    pub fn tick(&mut self) -> Option<Vec<u8>> {
         if let Some(call) = &mut self.call
             && let Some(answer) = call.poll()
         {
             self.rows = Some(answer.and_then(|text| online::rows(&text)));
             self.call = None;
+        }
+        let answer = self.fetching.as_mut()?.poll()?;
+        self.fetching = None;
+        self.note = None;
+        match answer.and_then(|text| online::replay(&text)) {
+            Ok(bytes) => Some(bytes),
+            Err(why) => {
+                self.note = Some(format!("couldn't get that run: {why}"));
+                None
+            }
         }
     }
 }
@@ -68,7 +115,7 @@ impl Boards {
 pub fn draw(f: &mut Frame, b: &Boards, me: Option<&str>, now: Instant) {
     let _ = now;
     let col = ui::column(f.area());
-    let [_, title, periods, resets, _, table, _, help] = Layout::vertical([
+    let [_, title, periods, resets, note, table, _, help] = Layout::vertical([
         Constraint::Fill(1),
         Constraint::Length(1),
         Constraint::Length(1),
@@ -97,6 +144,9 @@ pub fn draw(f: &mut Frame, b: &Boards, me: Option<&str>, now: Instant) {
         })
         .collect();
     f.render_widget(Line::from(chips).centered(), periods);
+    if let Some(say) = &b.note {
+        f.render_widget(Line::from(say.as_str().dark_gray()).centered(), note);
+    }
     let period = PERIODS[b.period].0;
     if let Some(left) = resets_in(period, unix_now()) {
         let line = format!("resets in {} (UTC)", span(left));
@@ -112,7 +162,7 @@ pub fn draw(f: &mut Frame, b: &Boards, me: Option<&str>, now: Instant) {
         }
         Some(Ok(rows)) => {
             let mut lines = Vec::new();
-            for r in rows {
+            for (i, r) in rows.iter().enumerate() {
                 if r.me {
                     lines.push(Line::from("⋯".dark_gray()).centered());
                 }
@@ -122,7 +172,8 @@ pub fn draw(f: &mut Frame, b: &Boards, me: Option<&str>, now: Instant) {
                     false => r.login.clone(),
                 };
                 let text = format!(
-                    "{:>4}  {:<24} {:>10}  {}",
+                    "{} {:>4}  {:<24} {:>10}  {}",
+                    if i == b.sel { "▸" } else { " " },
                     format!("#{}", r.rank),
                     who,
                     best::show(b.mode, r.score),
@@ -139,10 +190,14 @@ pub fn draw(f: &mut Frame, b: &Boards, me: Option<&str>, now: Instant) {
     };
     f.render_widget(Paragraph::new(lines), table);
     let hint = match (me, cfg!(target_arch = "wasm32")) {
-        (Some(_), false) => "←/→ period · esc menu",
-        (Some(_), true) => "←/→ period · esc menu · l log out",
-        (None, false) => "←/→ period · esc menu · `typepper link <github-login>` to be on it",
-        (None, true) => "←/→ period · esc menu · l log in with GitHub to be on it",
+        (Some(_), false) => "↑/↓ pick · enter watch · ←/→ period · esc menu",
+        (Some(_), true) => "↑/↓ pick · enter watch · ←/→ period · esc menu · l log out",
+        (None, false) => {
+            "↑/↓ pick · enter watch · ←/→ period · esc · `typepper link <login>` to be on it"
+        }
+        (None, true) => {
+            "↑/↓ pick · enter watch · ←/→ period · esc · l log in with GitHub to be on it"
+        }
     };
     f.render_widget(Line::from(hint.dark_gray()).centered(), help);
 }
@@ -276,7 +331,7 @@ pub fn strip(
     f.render_widget(Paragraph::new(lines), inner);
 }
 
-fn unix_now() -> u64 {
+pub fn unix_now() -> u64 {
     // web_time's SystemTime is the browser's clock on the web
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
@@ -324,7 +379,7 @@ fn days(y: i64, m: u32) -> i64 {
 }
 
 /// "3d 4h", "5h 12m", "12m".
-fn span(secs: u64) -> String {
+pub fn span(secs: u64) -> String {
     let (d, h, m) = (secs / 86_400, secs / 3600 % 24, secs / 60 % 60);
     match (d, h) {
         (1.., _) => format!("{d}d {h}h"),
@@ -344,6 +399,7 @@ mod tests {
             score,
             login: "x".into(),
             day: "2026-10-25".into(),
+            run: None,
             me: false,
         };
         let rows: Vec<Row> = (1..=3).map(|i| row(i, 100.0 - 10.0 * i as f64)).collect();

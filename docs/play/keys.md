@@ -19,6 +19,7 @@ The bottom line of every screen says what its keys do. All of them:
 | enter or space | play |
 | b | the boards for this mode |
 | l | browser only: log in with GitHub, or log out |
+| h | your rounds (the history) |
 | s or F2 | settings |
 | esc | quit (not in the browser: close the tab) |
 
@@ -49,7 +50,20 @@ Survival, floor is lava and hot pursuit then ask for a starting level: ←/→
 | Key | Does |
 |---|---|
 | ←/→ | the period: today, this week, month, year, all time |
+| ↑/↓ | pick a row |
+| enter | watch that row's round |
 | l | browser only: log in with GitHub to be on them, or log out |
+| esc | the menu |
+
+## The history
+
+Your last 50 rounds, newest first, kept on this machine.
+
+| Key | Does |
+|---|---|
+| ↑/↓ | pick a round |
+| enter | watch it (offline too) |
+| u | share it; in the browser, copy the link of one already shared |
 | esc | the menu |
 
 ## Settings

@@ -41,9 +41,16 @@ boards need it.
 If sharing fails, the results line says why (`couldn't send: …`); press u
 again.
 
-## Your last round, offline
+## Finding a link again
 
-The game keeps your last round on your machine, online or not:
+Press **h** on the menu: your last 50 rounds, kept on your machine (in the
+browser, by the browser), each with its link once it went up. Enter watches
+one, offline too; u shares one that hasn't gone up yet. In the browser, u on
+a shared round copies its link again.
+
+The boards play their rounds as well: ↑/↓ picks a row, enter watches it.
+
+## Your last round, from the shell
 
 ```sh
 typepper --replay

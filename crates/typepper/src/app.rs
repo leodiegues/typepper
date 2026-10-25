@@ -13,6 +13,7 @@ use web_time::Instant;
 use crate::best::{Bests, Outcome};
 use crate::boards::{self, Boards};
 use crate::engine::{Game, Input, LEVELS, Mode, Replay, Round, Setup, Test};
+use crate::history::{self, History};
 use crate::lava;
 use crate::menu::{self, Dialog, Menu, Pick};
 use crate::online::{self, Call};
@@ -39,6 +40,7 @@ enum Screen {
     Play(Round),
     Watch(Watch),
     Boards(Boards),
+    History(History),
 }
 
 /// Rounds going up: a shared one (anonymous), or a linked player's outbox.
@@ -49,6 +51,8 @@ struct Share {
     screen: u64,
     /// The outbox entries it carries (none: an anonymous share).
     outbox: Vec<String>,
+    /// The history round its link belongs to (`history::Round::at`).
+    round: Option<u64>,
     /// Under way, or how it went for this round: its link, or why not.
     state: Result<Call, Result<String, String>>,
 }
@@ -66,7 +70,7 @@ impl Screen {
         match self {
             Screen::Play(r) => Some(r),
             Screen::Watch(w) => Some(&w.round),
-            Screen::Title | Screen::Boards(_) => None,
+            Screen::Title | Screen::Boards(_) | Screen::History(_) => None,
         }
     }
 
@@ -108,6 +112,8 @@ pub struct App {
     strip: Option<Boards>,
     /// A logged-in browser's bests from the server, on their way.
     synced: Option<Call>,
+    /// The results screen's round in the history (`history::Round::at`).
+    played: Option<u64>,
 }
 
 impl App {
@@ -118,14 +124,7 @@ impl App {
         let detected_light = crate::theme::is_light();
         let settings = Settings::load();
         settings.apply(detected_light);
-        let screen = match watch {
-            Some((setup, replay)) => Screen::Watch(Watch {
-                round: Round::new(setup),
-                inputs: replay.inputs,
-                next: 0,
-            }),
-            None => Screen::Title,
-        };
+        let screen = watch.map_or(Screen::Title, watching);
         let account = online::account();
         // logged in on the web: bests set in the terminal show here too. In
         // the background: nothing waits on it, and a failure changes nothing
@@ -153,6 +152,7 @@ impl App {
             account,
             strip: None,
             synced,
+            played: None,
         }
     }
 
@@ -218,7 +218,31 @@ impl App {
             let body = online::submission(&Replay::of(r).encode(), score);
             match self.account {
                 Some(_) => self.send_outbox(),
-                None => self.send(body, Vec::new()),
+                None => self.send(body, Vec::new(), self.played),
+            }
+            return false;
+        }
+        // the history: u shares the picked round, or (on the web, where
+        // there's no text to select) copies the link it already has
+        if let (Screen::History(h), Key::Char('u')) = (&mut self.screen, &key)
+            && !self.settings.offline
+            && !touch()
+        {
+            match h.selected() {
+                Some(r) if r.link.is_some() => {
+                    let link = r.link.clone().unwrap_or_default();
+                    if cfg!(target_arch = "wasm32") {
+                        online::copy(&format!("https://{link}"));
+                        h.note = Some(format!("copied: {link}"));
+                    }
+                }
+                Some(r) => {
+                    let (body, at) = (online::submission(&r.replay, r.score), r.at);
+                    if self.may_send() {
+                        self.send(body, Vec::new(), Some(at));
+                    }
+                }
+                None => {}
             }
             return false;
         }
@@ -231,7 +255,7 @@ impl App {
                 Screen::Title => !self.menu.pressing(),
                 Screen::Boards(_) => true,
                 Screen::Play(r) => r.test().finished.is_some(),
-                Screen::Watch(_) => false,
+                Screen::Watch(_) | Screen::History(_) => false,
             }
         {
             match self.account.take() {
@@ -299,7 +323,20 @@ impl App {
             }
             (Screen::Boards(b), Key::Left) => b.step(-1),
             (Screen::Boards(b), Key::Right) => b.step(1),
+            (Screen::Boards(b), Key::Up) => b.pick(-1),
+            (Screen::Boards(b), Key::Down) => b.pick(1),
+            (Screen::Boards(b), Key::Enter) => b.watch(),
             (Screen::Boards(_), _) => {}
+            // your rounds, kept here (offline too)
+            (Screen::Title, Key::Char('h')) => next = Some(Screen::History(History::open())),
+            (Screen::History(h), Key::Up) => h.step(-1),
+            (Screen::History(h), Key::Down) => h.step(1),
+            (Screen::History(h), Key::Enter) => match h.selected().map(|r| checked(&r.replay)) {
+                Some(Ok(w)) => next = Some(watching(w)),
+                Some(Err(why)) => h.note = Some(format!("can't play it: {why}")),
+                None => {}
+            },
+            (Screen::History(_), _) => {}
             (Screen::Title, _) => {}
             (Screen::Play(r), key) => match key {
                 Key::Backspace => r.input(r.ms(now), Input::Backspace),
@@ -329,6 +366,13 @@ impl App {
                 online::answer(text.lines().last().unwrap_or(""))
             }));
             landed = share.screen == self.screens && !share.outbox.is_empty();
+            // the round's link, kept with it (without the rank after it)
+            if let (Some(at), Err(Ok(link))) = (share.round, &share.state) {
+                history::set_link(at, link.split(" · ").next().unwrap_or(link));
+                if let Screen::History(h) = &mut self.screen {
+                    h.reload();
+                }
+            }
         }
         // a linked player's round is in: the strip shows where it landed
         if landed
@@ -376,7 +420,15 @@ impl App {
                 }
             }
             Screen::Title => {}
-            Screen::Boards(b) => b.tick(),
+            Screen::Boards(b) => {
+                if let Some(bytes) = b.tick() {
+                    match checked(&bytes) {
+                        Ok(w) => next = Some(watching(w)),
+                        Err(why) => b.note = Some(format!("can't play it: {why}")),
+                    }
+                }
+            }
+            Screen::History(_) => {}
             Screen::Watch(w) => {
                 let ms = w.round.ms(now);
                 while let Some(&(at, input)) = w.inputs.get(w.next).filter(|(at, _)| *at <= ms) {
@@ -409,6 +461,9 @@ impl App {
                 crate::store::write_bytes("last.replay", &Replay::of(r).encode());
                 if self.bot.is_none() {
                     self.outcome = self.bests.record(r.setup.mode, &round);
+                    // and in the history, to watch again (or find its link)
+                    let replay = Replay::of(r).encode();
+                    self.played = Some(history::add(r.setup.mode, round.score, replay));
                     // a linked player's rounds go up on their own
                     if self.account.is_some() && !self.settings.offline {
                         online::outbox_add(&Replay::of(r).encode(), round.score);
@@ -447,6 +502,10 @@ impl App {
                 }
             }
             Screen::Boards(b) => boards::draw(f, b, self.account.as_deref(), now),
+            Screen::History(h) => {
+                let status = self.history_status();
+                history::draw(f, h, status.as_deref(), !self.settings.offline);
+            }
             Screen::Play(r) | Screen::Watch(Watch { round: r, .. }) => match &r.game {
                 Game::Lava(l) if l.test.finished.is_none() => lava::draw(f, l, now),
                 _ => {
@@ -506,19 +565,33 @@ impl App {
         }
     }
 
-    fn send(&mut self, body: Vec<u8>, outbox: Vec<String>) {
+    /// `round`: the history round this one's link goes with.
+    fn send(&mut self, body: Vec<u8>, outbox: Vec<String>, round: Option<u64>) {
         self.share = Some(Share {
             screen: self.screens,
             outbox,
+            round,
             state: Call::submit(body).map_err(Err),
         });
     }
 
+    /// The outbox; its last item is the round just played.
     fn send_outbox(&mut self) {
         let (names, body) = online::outbox();
         if !names.is_empty() {
-            self.send(body, names);
+            self.send(body, names, self.played);
         }
+    }
+
+    /// The history screen's word on a share started there.
+    fn history_status(&self) -> Option<String> {
+        let share = self.share.as_ref().filter(|s| s.screen == self.screens)?;
+        Some(match &share.state {
+            Ok(_) => "sharing…".into(),
+            Err(Ok(link)) if cfg!(target_arch = "wasm32") => format!("copied: {link}"),
+            Err(Ok(link)) => format!("shared: {link}"),
+            Err(Err(why)) => format!("couldn't send: {why} · u again"),
+        })
     }
 
     /// The boards beside a finished round of yours (not offline, on touch
@@ -565,6 +638,7 @@ impl App {
         (self.outcome, self.scored) = (None, false);
         self.pick = None;
         self.strip = None;
+        self.played = None;
         self.fade = self.frame.take().map(|b| (b, now));
     }
 }
@@ -576,6 +650,31 @@ fn reload() {
     if let Some(w) = ratzilla::web_sys::window() {
         let _ = w.location().reload();
     }
+}
+
+/// A replay these rules can play back.
+pub fn checked(bytes: &[u8]) -> Result<(Setup, Replay), String> {
+    let replay = Replay::decode(bytes).map_err(|e| e.to_string())?;
+    if replay.engine != crate::engine::VERSION {
+        return Err(format!(
+            "it was recorded by other rules (engine {}, these are {})",
+            replay.engine,
+            crate::engine::VERSION
+        ));
+    }
+    let setup = replay
+        .setup()
+        .ok_or("its mode isn't one this typepper has")?;
+    Ok((setup, replay))
+}
+
+/// A replay playing back from its start.
+fn watching((setup, replay): (Setup, Replay)) -> Screen {
+    Screen::Watch(Watch {
+        round: Round::new(setup),
+        inputs: replay.inputs,
+        next: 0,
+    })
 }
 
 /// A fresh round of `mode`, on new words.

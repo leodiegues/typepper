@@ -540,7 +540,9 @@ pub fn draw(f: &mut Frame, m: &Menu, bests: &Bests, account: Option<&str>, now: 
                 (true, None) => " · l log in",
                 (true, Some(_)) => " · l log out",
             };
-            format!("  ←/→ mode · ↑/↓ length · enter play{boards}{login} · s settings{QUIT}  ")
+            format!(
+                "  ←/→ mode · ↑/↓ length · enter play{boards}{login} · h history · s settings{QUIT}  "
+            )
         }
     };
     Line::from(hint.dark_gray())

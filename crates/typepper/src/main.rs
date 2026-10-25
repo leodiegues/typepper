@@ -2,6 +2,7 @@ mod app;
 mod best;
 mod boards;
 mod fx;
+mod history;
 mod lava;
 mod menu;
 mod online;
@@ -11,7 +12,7 @@ mod store;
 mod theme;
 mod ui;
 
-use app::{App, Bot, Key};
+use app::{App, Bot, Key, checked};
 // the rules live in their own crate, shared with the server
 use typepper_engine as engine;
 use web_time::Instant;
@@ -177,22 +178,6 @@ fn load_replay(path: Option<&String>) -> Result<(engine::Setup, engine::Replay),
         None => store::read_bytes("last.replay").ok_or("no round played yet")?,
     };
     checked(&bytes)
-}
-
-/// A replay these rules can play back.
-fn checked(bytes: &[u8]) -> Result<(engine::Setup, engine::Replay), String> {
-    let replay = engine::Replay::decode(bytes).map_err(|e| e.to_string())?;
-    if replay.engine != engine::VERSION {
-        return Err(format!(
-            "it was recorded by other rules (engine {}, these are {})",
-            replay.engine,
-            engine::VERSION
-        ));
-    }
-    let setup = replay
-        .setup()
-        .ok_or("its mode isn't one this typepper has")?;
-    Ok((setup, replay))
 }
 
 /// One `--script` step, "seconds:key" (a key name, or a single character).

@@ -10,7 +10,8 @@ extra:
 
 Press **b** on the title screen: the board for the card you're on, from the
 starting level you last picked. It opens on today; ←/→ switches between
-**today, this week, this month, this year and all time**. Esc goes back.
+**today, this week, this month, this year and all time**. ↑/↓ picks a row
+and enter plays that round back, key by key. Esc goes back.
 
 The results screen has the same board beside the chart. ←/→ opens it (linked,
 it opens by itself once your round is in) and walks the periods; b opens the

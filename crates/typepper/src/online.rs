@@ -53,11 +53,13 @@ pub struct Row {
     pub login: String,
     /// `YYYY-MM-DD`, UTC.
     pub day: String,
+    /// The run's id, to watch it (servers before 0.6 don't say).
+    pub run: Option<String>,
     /// The player's own row, below the top.
     pub me: bool,
 }
 
-/// A board's text (`<rank> <score> <login> <day>` lines, then `me …`).
+/// A board's text (`<rank> <score> <login> <day> <run>` lines, then `me …`).
 pub fn rows(text: &str) -> Result<Vec<Row>, String> {
     if let Some(why) = text.strip_prefix("err ") {
         return Err(why
@@ -79,6 +81,7 @@ pub fn rows(text: &str) -> Result<Vec<Row>, String> {
                 score: w.get(1)?.parse().ok()?,
                 login: w.get(2)?.to_string(),
                 day: w.get(3)?.to_string(),
+                run: w.get(4).map(|r| r.to_string()),
                 me,
             })
         })
@@ -153,6 +156,15 @@ fn settled(line: &str) -> bool {
     done.iter().any(|d| line.starts_with(d))
 }
 
+/// A `v1 replay` answer (`ok <hex>`): the replay's bytes, or why not.
+pub fn replay(text: &str) -> Result<Vec<u8>, String> {
+    match text.trim().split_once(' ') {
+        Some(("ok", hex)) => crate::store::unhex(hex).ok_or("a garbled replay".into()),
+        Some(("err", why)) => Err(why.split_once(' ').map_or(why, |(_, w)| w).into()),
+        _ => Err("typepper.com didn't answer".into()),
+    }
+}
+
 /// What ssh printed, once it's done: an answer, even an empty one (an empty
 /// board) if it exited cleanly; nothing from a failed ssh (255: no
 /// connection) is no answer at all.
@@ -215,11 +227,21 @@ mod imp {
 
         /// `mode`'s board for `period` (with the player's own row, if linked).
         pub fn board(mode: &str, period: &str) -> Result<Call, String> {
+            Call::ask(&["v1", "board", mode, period])
+        }
+
+        /// The run `id`'s replay (`ok <hex>`, see `online::replay`).
+        pub fn replay(id: &str) -> Result<Call, String> {
+            Call::ask(&["v1", "replay", id])
+        }
+
+        /// A command with nothing on stdin, as the linked player if there is one.
+        fn ask(command: &[&str]) -> Result<Call, String> {
             let pubkey = match account() {
                 Some(_) => "PubkeyAuthentication=yes",
                 None => "PubkeyAuthentication=no",
             };
-            let child = ssh(GAME_USER, &["-o", pubkey], &["v1", "board", mode, period])?
+            let child = ssh(GAME_USER, &["-o", pubkey], command)?
                 .env("SSH_ASKPASS", "typepper-asks-no-passphrases")
                 .env("SSH_ASKPASS_REQUIRE", "force")
                 .stdin(Stdio::null())
@@ -250,6 +272,9 @@ mod imp {
             }
         }
     }
+
+    /// The web puts links on the clipboard; a terminal's text can be selected.
+    pub fn copy(_: &str) {}
 
     /// `typepper link <login>`: ties this machine's ssh key to a GitHub
     /// account (the server checks the key is on github.com/<login>.keys).
@@ -403,6 +428,20 @@ mod imp {
             Call(slot)
         }
 
+        /// The run `id`'s replay, answered the way SSH does (`ok <hex>`).
+        pub fn replay(id: &str) -> Result<Call, String> {
+            let slot = Slot::default();
+            let done = slot.clone();
+            let id = id.to_string();
+            wasm_bindgen_futures::spawn_local(async move {
+                let answer = fetch(&id)
+                    .await
+                    .map(|b| format!("ok {}", crate::store::hex(&b)));
+                *done.borrow_mut() = Some(answer);
+            });
+            Ok(Call(slot))
+        }
+
         pub fn poll(&mut self) -> Option<Result<String, String>> {
             self.0.borrow_mut().take()
         }
@@ -509,7 +548,7 @@ mod imp {
     }
 
     /// The link on the clipboard: the canvas has no text to select.
-    fn copy(text: &str) {
+    pub fn copy(text: &str) {
         if let Some(w) = web_sys::window() {
             let _ = w.navigator().clipboard().write_text(text);
         }
@@ -524,10 +563,11 @@ mod tests {
 
     #[test]
     fn boards_read_their_rows() {
-        let text =
-            "1 112 leodiegues 2026-10-24\n2 98.5 y0sif 2026-10-23\nme 14 61 OctoTest 2026-10-20\n";
+        let text = "1 112 leodiegues 2026-10-24 7Xf9qyuC\n2 98.5 y0sif 2026-10-23\nme 14 61 OctoTest 2026-10-20\n";
         let rows = rows(text).unwrap();
         assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].run.as_deref(), Some("7Xf9qyuC"));
+        assert_eq!(rows[1].run, None, "an older server's row");
         assert_eq!(
             (rows[0].rank, rows[0].score, rows[0].login.as_str()),
             (1, 112.0, "leodiegues")
@@ -557,6 +597,17 @@ mod tests {
         assert_eq!(login_in("?login=a"), (Some("a".into()), "/".into()));
         assert_eq!(login_in("?login=<b>"), (None, "/".into()), "not a login");
         assert_eq!(login_in("?replay=x7Kp2QaZ").0, None);
+    }
+
+    #[test]
+    fn replays_come_as_hex() {
+        assert_eq!(replay("ok 545052ff\n"), Ok(vec![0x54, 0x50, 0x52, 0xff]));
+        assert_eq!(
+            replay("err gone that replay is gone\n"),
+            Err("that replay is gone".into())
+        );
+        assert!(replay("ok zz").is_err());
+        assert!(replay("").is_err());
     }
 
     #[test]

@@ -42,7 +42,7 @@ for checking the door is open.
 | `v1 unlink` | | lets go of the key that logged in |
 | | `GET /auth/github` | web login (see [browsers](#browsers)) |
 | | `POST /auth/logout` | ends the browser's session |
-| | `GET /v1/runs/{id}` | a stored replay's bytes |
+| `v1 replay <id>` | `GET /v1/runs/{id}` | a stored replay (hex over SSH, bytes over HTTP) |
 | | `GET https://r.typepper.com/{id}` | a run's share page |
 | `ping` | `GET /health` | `pong`; readiness |
 
@@ -121,16 +121,18 @@ v1 board time:30 week                      GET /v1/boards/time:30?period=week
   or a logged-in browser (HTTP) who's below the top, their own row:
 
 ```text
-1 131 leodiegues 2026-10-23
-2 118 y0sif 2026-10-21
-3 108 OctoTest 2026-10-24
-me 31 61 someone 2026-10-20
+1 131 leodiegues 2026-10-23 7Xf9qyuC
+2 118 y0sif 2026-10-21 nEGsHePP
+3 108 OctoTest 2026-10-24 Qm3kZ0aB
+me 31 61 someone 2026-10-20 a1B2c3D4
 ```
 
-`<rank> <score> <login> <day>`; ties share a rank and go to whoever got there
-first. An empty board is no lines. A bad mode or period:
-`err bad-board …` (404 over HTTP). HTTP boards may be 30 s old (cached
-`private` when they carry a `me` row).
+`<rank> <score> <login> <day> <run>`; ties share a rank and go to whoever got
+there first. `<run>` is the id of the row's run, to watch it; it came last,
+so games that read four words still read the rest. Every row's run is kept
+(see [the sweep](../built/server.md#the-sweep)). An empty board is no lines.
+A bad mode or period: `err bad-board …` (404 over HTTP). HTTP boards may be
+30 s old (cached `private` when they carry a `me` row).
 
 ## Linking
 
@@ -148,6 +150,8 @@ player's. `v1 unlink` answers `ok unlinked` (or `ok not-linked`).
 
 ## Replays and share pages
 
+- **`v1 replay <id>`**: `ok <hex>`, the replay as submitted, as hex (the
+  game reads answers as text). `err gone …` for unknown or expired ids.
 - **`GET /v1/runs/{id}`**: `application/octet-stream`, the replay as
   submitted; cacheable for a week (`immutable`: a run never changes). 404 for
   unknown or expired ids.

@@ -11,6 +11,7 @@ use russh::server::{Auth, ChannelOpenHandle, Handler, Msg, Response, Server, Ses
 use russh::{Channel, ChannelId};
 use sqlx::PgPool;
 
+use crate::id::Id;
 use crate::runs::{self, Quota};
 use crate::{accounts, board, github};
 
@@ -197,6 +198,7 @@ impl Handler for Door {
             },
             b"v1 unlink" => self.unlink().await,
             c if c.starts_with(b"v1 board ") => self.board(c).await,
+            c if c.starts_with(b"v1 replay ") => self.replay(c).await,
             _ => run(command),
         };
         reply(channel, out, status, session)
@@ -293,6 +295,25 @@ impl Door {
             Ok((top, mine)) => (board::text(&top, mine.as_ref()), 0),
             Err(e) => {
                 eprintln!("ssh: board: {e}");
+                ("err busy try later\n".into(), 1)
+            }
+        }
+    }
+
+    /// `v1 replay <id>`: a stored replay, as `ok <hex>` (the game reads text).
+    async fn replay(&self, command: &[u8]) -> (String, u32) {
+        let id = std::str::from_utf8(&command[b"v1 replay ".len()..]).unwrap_or("");
+        let Ok(id) = id.parse::<Id>() else {
+            return ("err gone no replay has that id\n".into(), 1);
+        };
+        match runs::replay(&self.db, id).await {
+            Ok(Some(bytes)) => {
+                let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+                (format!("ok {hex}\n"), 0)
+            }
+            Ok(None) => ("err gone that replay is gone\n".into(), 1),
+            Err(e) => {
+                eprintln!("ssh: replay: {e}");
                 ("err busy try later\n".into(), 1)
             }
         }

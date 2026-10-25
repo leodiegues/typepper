@@ -222,6 +222,8 @@ select rank() over (order by b.score desc, b.created_at) as rank, …
 - Only linked players' runs count; anonymous runs never rank.
 - Ties go to whoever got there first (`created_at`).
 - Top 20, plus the caller's own row when it's below them.
+- Each row names its run (the best run's id), so the game can fetch it with
+  `v1 replay <id>` and play it. The sweep keeps every run a board shows.
 - Runs from every engine version share a board. If a balance change ever
   skews scores, the fix is one more condition, `and engine = $3`.
 

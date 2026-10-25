@@ -5,6 +5,7 @@ extra:
   covers:
     - crates/typepper/src/online.rs
     - crates/typepper/src/boards.rs
+    - crates/typepper/src/history.rs
     - crates/typepper/src/store.rs
     - crates/typepper/src/main.rs
 ---
@@ -26,6 +27,8 @@ nothing blocks the game.
 | `b` on the menu or the results screen, and each period after | `v1 board` | `online` on |
 | `typepper link` / `unlink` | `v1 link` / `v1 unlink` | run by hand, in the terminal |
 | `l` on the boards, on the web | off to `/auth/github`, or `POST /auth/logout` | pressed |
+| enter on a board row | `v1 replay <id>` (web: `GET /v1/runs/<id>`) | `online` on |
+| u on the history screen | that round goes up | `online` on, not a touch screen |
 | `?replay=<id>` on the web | `GET /v1/runs/<id>` | the URL asks for it |
 | starting the web game | `GET /v1/me/bests` | logged in, `online` on |
 
@@ -43,11 +46,13 @@ pub struct Call;                                  // a request under way
 impl Call {
     pub fn submit(body: Vec<u8>) -> Result<Call, String>;
     pub fn board(mode: &str, period: &str) -> Result<Call, String>;
+    pub fn replay(id: &str) -> Result<Call, String>;            // `ok <hex>`, on the web too
     pub fn poll(&mut self) -> Option<Result<String, String>>;   // never waits
 }
 pub fn submission(replay: &[u8], claimed: Option<f64>) -> Vec<u8>;
 pub fn answer(line: &str) -> Result<String, String>;           // a link (and rank), or why not
 pub fn rows(text: &str) -> Result<Vec<Row>, String>;            // a board
+pub fn replay(text: &str) -> Result<Vec<u8>, String>;           // a `v1 replay` answer
 pub fn account() -> Option<String>;                             // linked, or logged in on the web
 pub fn outbox_add(..); pub fn outbox() -> ..; pub fn outbox_settle(..);
 // desktop: link(), unlink()   web: log_in(), log_out(), arrived() (reads ?login=)
@@ -160,7 +165,8 @@ last-picked starting level, starting at today. ←/→ switches today, this week
 this month, this year and all time; each switch is one call. Non-all periods show
 "resets in … (UTC)", computed locally (calendar maths in `boards.rs`). The
 player's row is highlighted, and shown under the top 20 when it's lower.
-Esc goes back.
+↑/↓ picks a row and enter fetches its run and plays it; a row from a server
+that doesn't name its run does nothing. Esc goes back.
 
 The results screen has the same board as a strip beside the chart (only on a
 column at least 76 wide, and not for zen, which has no score). It opens by
@@ -169,6 +175,30 @@ round; for anyone else, at the first ←/→ press, which is the player's action
 (decision 1). A player who isn't on the board sees where this round would
 land (`#4?`, a tie going under) as `you, if linked`. ←/→ walks the periods,
 and `b` opens the full screen at the same period.
+
+## The history
+
+`history.rs`. Every round you finish (not the bot's) is kept in `history`, one
+line per round, the newest last, at most 50:
+
+```text
+<unix ms> <mode key> <score|-> <link|-> <replay hex>
+1792879200123 time:15 108 r.typepper.com/7Xf9qyuC 545052…
+```
+
+- **One entry, not a folder**: the web store has only read and write. The
+  whole entry is rewritten each round (≤ 50 × a few KB).
+- **Links come back to their round**: a share remembers the `<unix ms>` of
+  the round it carries (the round just played, or the one picked in the
+  history), and its answer's link is written onto that line. A linked round
+  saved for later goes up with the next one, so only that one's link comes
+  back; u in the history shares it again.
+- Replays over 64 KiB (hours of zen) stay out of it: localStorage holds
+  about 5 MB. They're still `last.replay`.
+
+`h` on the menu shows it, newest first, offline too: enter plays the picked
+round (refusing ones from other rules), u shares it, and on the web, where
+the canvas has no text to select, u on a shared round copies its link.
 
 ## Files
 
@@ -181,6 +211,7 @@ Under the data dir (`$XDG_DATA_HOME/typepper/`, else
 | `bests` | personal bests, `<mode name>=<value>` lines (`HOT PURSUIT from lv7=31`) |
 | `settings` | theme, effects, font (web), `online=on/off` |
 | `last.replay` | the last round played, hex (for `--replay`) |
+| `history` | your last 50 rounds, with their links (see [the history](#the-history)) |
 | `account` | the linked (desktop) or logged-in (web) GitHub login |
 | `known_hosts` | the server's host key, rewritten before each ssh call (desktop) |
 | `outbox/<unix ms>` | rounds waiting to go up, hex (linked, or logged in) |

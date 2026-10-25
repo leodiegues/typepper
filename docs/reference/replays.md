@@ -10,7 +10,8 @@ extra:
 A replay is a round's start and every input, at its millisecond. Played
 through the engine, it is the round again: the same text, the same heat, the
 same score, on any machine. That's what the server scores, what share links
-play, and what `typepper --replay` shows. Code: `typepper-engine/src/replay.rs`.
+play, what the history and the boards play, and what `typepper --replay`
+shows. Code: `typepper-engine/src/replay.rs`.
 
 ## Format 1
 
@@ -107,6 +108,7 @@ every truncation point, junk, and two replays read off one stream.
 | Where | What |
 |---|---|
 | the game, after every round | `last.replay` in the data dir (hex text, so localStorage can hold it on the web) |
+| the game, your last 50 rounds | `history`, one line per round, with its share link once it has one (see [game client](../built/game-client.md#the-history)) |
 | the game, linked and not yet sent | `outbox/<unix ms>` (see [game client](../built/game-client.md)) |
 | the server | `runs.replay`, a `bytea` next to the server's numbers (see [server](../built/server.md)) |
 
@@ -116,6 +118,10 @@ every truncation point, junk, and two replays read off one stream.
   `typepper --replay FILE` plays raw replay bytes from a file. It refuses
   replays from other rules ("recorded by other rules (engine 2, these are 1)")
   and modes this build doesn't have.
+- **The history** (`h` on the menu): your last 50 rounds, on this machine,
+  offline too. Enter plays the picked one.
+- **The boards**: ↑/↓ picks a row, enter fetches its run (`v1 replay <id>`,
+  or `GET /v1/runs/<id>` on the web) and plays it.
 - **`typepper.com/?replay=<id>`** fetches `GET api.typepper.com/v1/runs/<id>`
   before the game starts, then plays it. A missing or expired replay
   starts the game normally (and warns in the console).

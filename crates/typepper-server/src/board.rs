@@ -5,6 +5,8 @@
 use sqlx::{PgPool, Row};
 use typepper_engine::Mode;
 
+use crate::id::Id;
+
 /// Rows a board shows.
 pub const TOP: i64 = 20;
 
@@ -42,13 +44,15 @@ impl Period {
     }
 }
 
-/// One row: where, who, what, when (`YYYY-MM-DD`, UTC).
+/// One row: where, who, what, when (`YYYY-MM-DD`, UTC), and the run, to
+/// watch it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Entry {
     pub rank: i64,
     pub login: String,
     pub score: f64,
     pub day: String,
+    pub run: Id,
 }
 
 // every player's best in `mode` since `$2` began (or ever, for null), ranked;
@@ -57,14 +61,14 @@ macro_rules! ranked {
     () => {
         "
     with best as (
-        select distinct on (r.player_id) r.player_id, r.score, r.created_at
+        select distinct on (r.player_id) r.id, r.player_id, r.score, r.created_at
         from runs r
         where r.mode = $1 and r.player_id is not null and r.score is not null
           and ($2::text is null or r.created_at >= date_trunc($2, now(), 'UTC'))
         order by r.player_id, r.score desc, r.created_at
     )
     select rank() over (order by b.score desc, b.created_at) as rank,
-           p.id as player, p.login, b.score,
+           b.id as run, p.id as player, p.login, b.score,
            to_char(b.created_at at time zone 'UTC', 'YYYY-MM-DD') as day
     from best b join players p on p.id = b.player_id"
     };
@@ -96,6 +100,7 @@ pub async fn board(
             login: r.get("login"),
             score: r.get("score"),
             day: r.get("day"),
+            run: Id(r.get("run")),
         };
         match entry.rank <= TOP {
             true => top.push(entry),
@@ -135,10 +140,11 @@ pub async fn bests(db: &PgPool, player: i64) -> sqlx::Result<String> {
     Ok(rows.iter().map(|(m, s)| format!("{m} {s}\n")).collect())
 }
 
-/// A board as text, one line per row (`<rank> <score> <login> <day>`), then
-/// the caller's own row as `me …` when it's below the top. Over SSH and HTTP.
+/// A board as text, one line per row (`<rank> <score> <login> <day> <run>`),
+/// then the caller's own row as `me …` when it's below the top. Over SSH and
+/// HTTP. `<run>` came last, so games that read four words still read it.
 pub fn text(top: &[Entry], me: Option<&Entry>) -> String {
-    let line = |e: &Entry| format!("{} {} {} {}", e.rank, e.score, e.login, e.day);
+    let line = |e: &Entry| format!("{} {} {} {} {}", e.rank, e.score, e.login, e.day, e.run);
     let mut out: Vec<String> = top.iter().map(line).collect();
     if let Some(e) = me {
         out.push(format!("me {}", line(e)));
@@ -217,7 +223,7 @@ mod tests {
             player(&db, "cy").await,
         );
         run(&db, Some(a), &mode.key(), 30.0, 0).await;
-        run(&db, Some(a), &mode.key(), 50.0, 400).await; // ann's best, but last year
+        let best = run(&db, Some(a), &mode.key(), 50.0, 400).await; // ann's best, but last year
         run(&db, Some(b), &mode.key(), 40.0, 0).await;
         run(&db, Some(c), &mode.key(), 40.0, 0).await; // ties bob, later: below him
         run(&db, None, &mode.key(), 99.0, 0).await; // anonymous: never ranked
@@ -228,6 +234,7 @@ mod tests {
             .map(|e| (e.rank, e.login.as_str(), e.score))
             .collect();
         assert_eq!(names, [(1, "ann", 50.0), (2, "bob", 40.0), (3, "cy", 40.0)]);
+        assert_eq!(top[0].run, best, "a row is its best run, to watch");
         let (top, _) = board(&db, mode, Period::Week, None).await.unwrap();
         let names: Vec<&str> = top.iter().map(|e| e.login.as_str()).collect();
         assert_eq!(names, ["bob", "cy", "ann"], "this week ann only has 30");

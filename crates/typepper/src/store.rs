@@ -94,11 +94,11 @@ pub fn write_bytes(name: &str, bytes: &[u8]) {
     let _ = write(name, &hex(bytes));
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn unhex(text: &str) -> Option<Vec<u8>> {
+pub fn unhex(text: &str) -> Option<Vec<u8>> {
     (0..text.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(text.get(i..i + 2)?, 16).ok())
