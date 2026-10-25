@@ -1,4 +1,5 @@
 ---
+weight: 3
 extra:
   covers:
     - crates/typepper/src/app.rs

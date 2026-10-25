@@ -1,4 +1,5 @@
 ---
+weight: 5
 extra:
   covers:
     - infra/**
@@ -124,7 +125,7 @@ multi-line values in the clear. Check with `--json` and a parser instead.
 | actions | commit SHAs in the workflows | Dependabot (not `release.yml`) |
 | Docker base images | `@sha256` in the Dockerfile | Dependabot |
 | Rust | `rust-toolchain.toml` (1.95.0) | by hand; keep the Dockerfile's image tag in step |
-| railway CLI, Trunk, dist, cargo-release, node | `mise.toml` + `mise.lock` (checksums per platform) | by hand |
+| railway CLI, Trunk, dist, cargo-release, node, Zola | `mise.toml` + `mise.lock` (checksums per platform) | by hand |
 | the Railway SDK | `infra/railway/package-lock.json` | Dependabot |
 | Postgres in CI | `@sha256` in `ci.yml` and `deploy-production.yml` | by hand |
 
@@ -137,6 +138,7 @@ Railway's builder until the manifests change.
 
 ```sh
 mise run server         # the server against a local Postgres 18 in Docker
+mise run docs           # the docs site from docs/, at http://127.0.0.1:1111
 mise run infra:plan     # what an apply would change (read-only)
 mise run infra:apply    # apply railway.ts
 mise run infra:deploy   # upload this checkout for Railway to build

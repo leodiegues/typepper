@@ -1,4 +1,5 @@
 ---
+weight: 1
 extra:
   covers:
     - crates/typepper-server/src/http.rs

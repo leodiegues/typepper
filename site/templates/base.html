@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ config.title }}{% endblock %}</title>
+<meta name="description" content="{{ config.description }}">
+<link rel="icon" href="{{ get_url(path='assets/favicon.ico') }}">
+<link rel="stylesheet" href="{{ get_url(path='style.css', cachebust=true) }}">
+<link rel="preload" href="{{ get_url(path='assets/DepartureMono-Regular.woff2') }}" as="font" type="font/woff2" crossorigin>
+<!-- before the first paint: the theme you picked, else your system's -->
+<script>document.documentElement.dataset.theme = localStorage.getItem("typepper-docs.theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");</script>
+</head>
+<body>
+{%- set here = current_path | default(value="/") %}
+<header>
+  <a id="logo" href="{{ get_url(path='@/_index.md') }}" aria-label="typepper docs">
+    <img class="dark" src="{{ get_url(path='assets/wordmark-dark.svg') }}" alt="">
+    <img class="light" src="{{ get_url(path='assets/wordmark-light.svg') }}" alt="">
+  </a>
+  <span class="tag">docs</span>
+  <span class="spacer"></span>
+  <button class="chip" id="theme" type="button">theme</button>
+  <a class="chip" href="{{ config.extra.play }}">play ▸</a>
+</header>
+
+<div class="wrap">
+  <nav>
+    {%- set root = get_section(path="_index.md") %}
+    {%- for path in root.subsections %}
+    {%- set sec = get_section(path=path) %}
+    <div class="sec{% if here is starting_with(pat=sec.path) %} here{% endif %}" data-pepper="{{ sec.extra.pepper }}">
+      <pre class="pep" aria-hidden="true"></pre>
+      <h4><a href="{{ sec.permalink }}">{{ sec.title }}</a></h4>
+      <div class="links">
+        {%- for p in sec.pages %}
+        <a href="{{ p.permalink }}"{% if here == p.path %} class="on" aria-current="page"{% endif %}>{{ p.title | lower }}</a>
+        {%- endfor %}
+      </div>
+    </div>
+    {%- endfor %}
+  </nav>
+
+  <main>{% block content %}{% endblock %}</main>
+
+  <aside id="rail">
+    {%- block rail %}{% endblock %}
+  </aside>
+</div>
+
+<footer>
+  <a href="{{ config.extra.repo }}">source</a>
+  {%- block edit %}{% endblock %} · <a href="{{ config.extra.play }}">play typepper</a>
+</footer>
+
+<script src="{{ get_url(path='site.js', cachebust=true) }}" type="module"></script>
+</body>
+</html>

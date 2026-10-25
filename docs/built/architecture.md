@@ -1,3 +1,7 @@
+---
+weight: 1
+---
+
 # Architecture
 
 typepper is a typing game that runs in a terminal and in a browser, plus a

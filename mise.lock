@@ -215,3 +215,50 @@ url = "https://nodejs.org/dist/v24.22.1/node-v24.22.1-darwin-x64.tar.gz"
 [tools.node."platforms.windows-x64"]
 checksum = "sha256:d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5"
 url = "https://nodejs.org/dist/v24.22.1/node-v24.22.1-win-x64.zip"
+
+[[tools.zola]]
+version = "0.23.6"
+backend = "aqua:getzola/zola"
+specifiers = ["0.23.6"]
+
+[tools.zola."platforms.linux-arm64"]
+checksum = "sha256:266448fffbf7c7004ca399d0e76dd699541771096d8a42aede98cebe2a029d02"
+url = "https://github.com/getzola/zola/releases/download/v0.23.6/zola-v0.23.6-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/getzola/zola/releases/assets/560029424"
+provenance = "github-attestations"
+
+[tools.zola."platforms.linux-arm64-musl"]
+checksum = "sha256:266448fffbf7c7004ca399d0e76dd699541771096d8a42aede98cebe2a029d02"
+url = "https://github.com/getzola/zola/releases/download/v0.23.6/zola-v0.23.6-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/getzola/zola/releases/assets/560029424"
+provenance = "github-attestations"
+
+[tools.zola."platforms.linux-x64"]
+checksum = "sha256:8f5132b3522412d04e395e0b25f6d68613ad272a873e54a2b3ebf664873024a4"
+url = "https://github.com/getzola/zola/releases/download/v0.23.6/zola-v0.23.6-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/getzola/zola/releases/assets/560029419"
+provenance = "github-attestations"
+
+[tools.zola."platforms.linux-x64-musl"]
+checksum = "sha256:8f5132b3522412d04e395e0b25f6d68613ad272a873e54a2b3ebf664873024a4"
+url = "https://github.com/getzola/zola/releases/download/v0.23.6/zola-v0.23.6-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/getzola/zola/releases/assets/560029419"
+provenance = "github-attestations"
+
+[tools.zola."platforms.macos-arm64"]
+checksum = "sha256:cbffbd29b3f59c3f52633507c8cb945a7a02d8b1399b43b235f5932912297aa3"
+url = "https://github.com/getzola/zola/releases/download/v0.23.6/zola-v0.23.6-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/getzola/zola/releases/assets/560029425"
+provenance = "github-attestations"
+
+[tools.zola."platforms.macos-x64"]
+checksum = "sha256:79a4d0ab51a4d863c068e6e594c6fce36f0aa17429a414ea63066f5910d14460"
+url = "https://github.com/getzola/zola/releases/download/v0.23.6/zola-v0.23.6-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/getzola/zola/releases/assets/560029423"
+provenance = "github-attestations"
+
+[tools.zola."platforms.windows-x64"]
+checksum = "sha256:79179284f816febc281adbedb27189806cf22f83e8be4d0fca6835fbeeb09587"
+url = "https://github.com/getzola/zola/releases/download/v0.23.6/zola-v0.23.6-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/getzola/zola/releases/assets/560029421"
+provenance = "github-attestations"

@@ -72,6 +72,19 @@ with `<login>.keys` (your public key) and `users/<login>` (`{"id": 1,
 "login": "<login>"}`) with `python3 -m http.server 8765`, and start the server
 with `TYPEPPER_GITHUB=http://127.0.0.1:8765`.
 
+### The docs site
+
+```sh
+mise run docs
+```
+
+This serves docs.typepper.com from `docs/` at `http://127.0.0.1:1111`, and
+reloads as you edit. `site/prepare.py` copies `docs/` into Zola's
+`site/content/`, turning links between docs into ones Zola checks: a broken
+link or `#anchor` fails the build. Write links the way GitHub reads them
+(`../reference/protocol.md#boards`); a page needs front matter (its
+`weight` orders it in its section), and its first `# heading` is its title.
+
 ## Tests
 
 ```sh

@@ -1,5 +1,6 @@
 ---
 title: online
+sort_by: weight
 weight: 2
 extra:
   pepper: jalapeño

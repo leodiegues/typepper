@@ -8,6 +8,7 @@ node = "24"                              # the Railway SDK that railway.ts impor
 "github:trunk-rs/trunk" = "0.21.14"      # the web build (the registry's `trunk` is another tool)
 "github:axodotdev/cargo-dist" = "0.33.0" # dist, as in dist-workspace.toml
 cargo-release = "1.1.7"
+zola = "0.23.6"
 
 [settings]
 lockfile = true
@@ -59,4 +60,14 @@ echo "http://localhost:8080/health · ssh -p 2222 localhost ping"
 echo "a game that shares here: TYPEPPER_SSH=localhost:2222 TYPEPPER_SSH_KNOWN_HOST=\"\$(cat $key.pub)\" typepper"
 TYPEPPER_SSH_HOST_KEY="$(cat "$key")" TYPEPPER_DATABASE_URL=postgres://postgres:typepper@localhost:55432/postgres \
   cargo run -p typepper-server
+'''
+
+[tasks.docs]
+description = "Serve docs.typepper.com from docs/ at http://127.0.0.1:1111, reloading as you edit"
+run = '''
+python3 site/prepare.py
+# docs/ isn't Zola's content dir: copy edits across as they happen
+(while sleep 1; do python3 site/prepare.py; done) &
+trap "kill $!" EXIT
+zola --root site serve
 '''

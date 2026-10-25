@@ -1,5 +1,6 @@
 ---
 title: reference
+sort_by: weight
 weight: 3
 extra:
   pepper: habanero

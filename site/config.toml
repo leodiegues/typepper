@@ -1,0 +1,11 @@
+# docs.typepper.com: Zola, from docs/ (site/prepare.py copies it into
+# site/content/). `mise run docs` serves it locally.
+base_url = "https://docs.typepper.com"
+title = "typepper docs"
+description = "How to play typepper, how it talks to typepper.com, and how it's built."
+compile_sass = false
+build_search_index = false
+
+[extra]
+repo = "https://github.com/leodiegues/typepper"
+play = "https://typepper.com/"

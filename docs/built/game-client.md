@@ -1,4 +1,6 @@
 ---
+title: Game client
+weight: 4
 extra:
   covers:
     - crates/typepper/src/online.rs

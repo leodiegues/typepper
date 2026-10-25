@@ -1,3 +1,7 @@
+---
+weight: 6
+---
+
 # Decisions
 
 Why typepper's online side is built the way it is. Each entry: what was

@@ -1,4 +1,5 @@
 ---
+weight: 2
 extra:
   covers:
     - crates/typepper-engine/src/lib.rs

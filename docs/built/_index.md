@@ -1,5 +1,6 @@
 ---
 title: how it's built
+sort_by: weight
 weight: 4
 extra:
   pepper: carolina reaper

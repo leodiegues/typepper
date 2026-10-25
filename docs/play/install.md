@@ -1,4 +1,5 @@
 ---
+weight: 1
 extra:
   covers:
     - install.sh

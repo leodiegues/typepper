@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}{{ section.title }} · {{ config.title }}{% endblock %}
+{% block content %}{{ section.content | safe }}{% endblock %}
+{% block rail %}{% set toc = section.toc %}{% include "toc.html" %}{% endblock %}
+{% block edit %}{% set path = section.relative_path %}{% include "edit.html" %}{% endblock %}

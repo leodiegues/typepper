@@ -1,0 +1,10 @@
+{#- the page's h2s: its toc is one h1, the page's title, with them under it -#}
+{%- if toc | length == 1 %}{% set toc = toc[0].children %}{% endif %}
+{%- if toc | length > 1 %}
+<h4>on this page</h4>
+<ol id="toc">
+  {%- for h in toc %}
+  <li><a href="{{ h.permalink | safe }}" title="{{ h.title }}">{{ h.title | safe }}</a></li>
+  {%- endfor %}
+</ol>
+{%- endif %}

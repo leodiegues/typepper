@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} · {{ config.title }}{% endblock %}
+{% block content %}
+{{ page.content | safe }}
+{%- if page.lower or page.higher %}
+<div class="pager">
+  {%- if page.lower %}<a class="prev" href="{{ page.lower.permalink }}"><span class="arr">◂</span> {{ page.lower.title | lower }}</a>{% else %}<span></span>{% endif %}
+  {%- if page.higher %}<a class="next" href="{{ page.higher.permalink }}">{{ page.higher.title | lower }} <span class="arr">▸</span></a>{% endif %}
+</div>
+{%- endif %}
+{% endblock %}
+{% block rail %}{% set toc = page.toc %}{% include "toc.html" %}{% endblock %}
+{% block edit %}{% set path = page.relative_path %}{% include "edit.html" %}{% endblock %}

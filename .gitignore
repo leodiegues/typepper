@@ -37,3 +37,9 @@ rustc-ice-*.txt
 
 # infra/railway: npm ci fetches the Railway SDK and CLI
 node_modules/
+
+# the docs site: site/prepare.py makes these from docs/ and assets/
+/site/content
+/site/static/assets
+/site/public
+__pycache__/
