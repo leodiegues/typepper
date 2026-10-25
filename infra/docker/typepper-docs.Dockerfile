@@ -1,8 +1,8 @@
 # typepper-docs: docs.typepper.com, static. Railway builds it from the repo root
 # (see infra/railway):
 #   docker build -f infra/docker/typepper-docs.Dockerfile .
-# Bases are pinned by digest (dependabot bumps them); keep Zola's tag in step
-# with mise.toml.
+# Bases are pinned by digest (dependabot bumps them; docs.yml builds this, so
+# a bump is tested). mise.toml's Zola is only for `mise run docs`.
 
 # docs/ → site/content/, links turned into ones Zola checks (site/prepare.py)
 FROM python:3.14-alpine@sha256:601e99e090cb08c2784a42395487709500bc39930307fe72f3f11a8f3c430762 AS prepare
