@@ -9,8 +9,13 @@ extra:
 # Boards
 
 Press **b** on the title screen: the board for the card you're on, from the
-starting level you last picked. ←/→ switches between **today, this week, this
-month, this year and all time**. Esc goes back.
+starting level you last picked. It opens on today; ←/→ switches between
+**today, this week, this month, this year and all time**. Esc goes back.
+
+The results screen has the same board beside the chart. ←/→ opens it (linked,
+it opens by itself once your round is in) and walks the periods; b opens the
+full board. Not linked? It shows where your round would land: `#4? you, if
+linked`.
 
 ```text
 1  131  leodiegues  2026-10-23

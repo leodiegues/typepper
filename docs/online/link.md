@@ -31,6 +31,7 @@ Linking is in the terminal game. The browser plays anonymously for now.
 
 - Every round you finish goes up by itself, as you, and the results line
   says where it landed: `saved: r.typepper.com/… · #3 all time`.
+  Today's board opens beside the chart, with your row in it.
 - Offline? Rounds wait on your machine and go up with the next one played
   online.
 - Settings → online: off stops it all. Your rounds stay on your machine.

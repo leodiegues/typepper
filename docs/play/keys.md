@@ -38,6 +38,8 @@ Survival, floor is lava and hot pursuit then ask for a starting level: ←/→
 |---|---|
 | tab or enter | again, from the same level |
 | u | share this round (see [share](../online/share.md)) |
+| ←/→ | the boards beside the chart: open them, then switch period |
+| b | the full board for this mode |
 | esc | the menu |
 
 ## Settings
