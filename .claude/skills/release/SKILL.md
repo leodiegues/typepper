@@ -111,6 +111,7 @@ is detached: green means Railway took the commit, so also check that
 ```sh
 gh release view vX.Y.Z --json assets --jq '.assets[].name'
 curl -sSfL https://typepper.com/ | grep -o '<title>[^<]*'
+curl -sSIL -o /dev/null -w '%{http_code}\n' https://docs.typepper.com/
 curl -sSfL https://typepper.com/install.sh | tail -2
 curl -sSIL -o /dev/null -w '%{http_code}\n' \
   https://github.com/leodiegues/typepper/releases/latest/download/typepper-installer.sh
@@ -118,7 +119,7 @@ curl -sSIL -o /dev/null -w '%{http_code}\n' \
 
 Expect 5 platform archives (macOS ×2, Linux ×2, Windows), a
 `typepper-<target>-update` updater for each (what `typepper upgrade` runs),
-both installers and checksums, the site's title, the installer hand-off script, and a `200`.
+both installers and checksums, the site's title, a `200` from the docs, the installer hand-off script, and a `200`.
 Don't run the installer itself without asking: it installs into the user's
 `~/.cargo/bin`.
 

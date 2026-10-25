@@ -49,6 +49,11 @@ description = "Upload this checkout for Railway to build and deploy, without wai
 depends = ["infra:guard"]
 run = "railway up --detach --service typepper-server"
 
+[tasks."infra:deploy-docs"]
+description = "Upload this checkout for Railway to build and deploy docs.typepper.com, without waiting"
+depends = ["infra:guard"]
+run = "railway up --detach --service typepper-docs"
+
 [tasks.server]
 description = "Run typepper-server against a local Postgres (docker)"
 run = '''

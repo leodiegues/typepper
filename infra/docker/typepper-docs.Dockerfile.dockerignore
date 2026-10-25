@@ -1,0 +1,11 @@
+# BuildKit reads this file for typepper-docs.Dockerfile only: the docs, the
+# site, and the assets prepare.py copies
+*
+!docs
+!site
+!assets/fonts
+!assets/logo
+site/content
+site/public
+site/static/assets
+**/__pycache__

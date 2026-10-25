@@ -52,6 +52,7 @@ flowchart LR
 | `api.typepper.com` | the HTTP API | Railway's edge (port 8080), Cloudflare proxied |
 | `r.typepper.com` | share pages (same service) | Railway's edge (port 8080), Cloudflare proxied |
 | `ssh.typepper.com` | the SSH door, port **36080** | Railway's TCP proxy (`sakura.proxy.rlwy.net:36080` → 2222), DNS only |
+| `docs.typepper.com` | these docs (static, its own service) | Railway's edge (port 8080), Cloudflare proxied |
 
 Railway picks the TCP proxy's port, and released games have it built in, so
 the proxy must never be recreated (see [operations](operations.md)).
