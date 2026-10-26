@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="https://ratatui.rs/"><img alt="Built With Ratatui" src="https://img.shields.io/badge/Built_With_Ratatui-000?logo=ratatui&logoColor=fff"></a>
+  <a href="https://cli.masoko.net/tools/typepper/"><img alt="typepper on The Terminal Index" src="https://cli.masoko.net/badge/typepper.svg"></a>
 </p>
 
 <p align="center">
