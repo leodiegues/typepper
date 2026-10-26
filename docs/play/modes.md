@@ -21,6 +21,8 @@ Six cards on a carousel. ←/→ picks the mode, ↑/↓ its length or variant.
 | **FLOOR IS LAVA** | type the falling words before they hit the lava | lock-on or free aim | words survived |
 | **HOT PURSUIT** | outrun the cops; a wrong key stops you cold | | words survived |
 
+Until your first key, every round shows its rules in a line or two.
+
 Bests are kept for every mode, length and starting level, on your machine
 (in the browser, in its storage).
 

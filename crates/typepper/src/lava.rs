@@ -2,6 +2,7 @@
 //! are fractions (x across, y down, 1 = the bottom); `draw` maps them to cells.
 
 use ratatui::prelude::*;
+use ratatui::widgets::{Paragraph, Wrap};
 use web_time::Instant;
 
 use crate::engine::lava::{LANDINGS, Lava, RISE};
@@ -43,10 +44,15 @@ pub fn draw(f: &mut Frame, l: &Lava, now: Instant) {
     let surface = pool(buf, l, field, now);
     words(buf, l, field);
     if l.test.started.is_none() {
-        let middle = Rect::new(field.x, field.y + field.height / 2, field.width, 1);
-        Line::from("type a falling word to start".dark_gray())
+        let [a, b] = menu::rules(l.test.mode);
+        let lines: Vec<Line> = [a, b, "", "type a falling word to start"]
+            .map(|s| s.dark_gray().into())
+            .into();
+        let middle = Rect::new(field.x, field.y + field.height / 2, field.width, 5);
+        Paragraph::new(lines)
             .centered()
-            .render(middle, buf);
+            .wrap(Wrap { trim: true })
+            .render(middle.intersection(field), buf);
     }
     bursts(buf, l, field, now);
     splashes(buf, l, field, surface, now);

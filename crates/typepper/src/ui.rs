@@ -5,7 +5,7 @@ use web_time::Instant;
 use ratatui::prelude::*;
 use ratatui::symbols::Marker;
 use ratatui::widgets::{
-    Axis, Block, BorderType, Chart, Clear, Dataset, GraphType, Padding, Paragraph,
+    Axis, Block, BorderType, Chart, Clear, Dataset, GraphType, Padding, Paragraph, Wrap,
 };
 
 use crate::best::{self, Outcome};
@@ -283,6 +283,16 @@ fn typing(f: &mut Frame, panel: Rect, help: Rect, t: &Test, now: Instant) -> (Te
     }
     let rank_lines: Vec<Line> = rank_lines.into_iter().map(Line::right_aligned).collect();
     f.render_widget(Paragraph::new(rank_lines), rank_area);
+    // before the first key, the mode's rules stand in for the empty combo and rank
+    if t.started.is_none() {
+        let [a, b] = menu::rules(t.mode);
+        let lines = vec![Line::default(), a.dark_gray().into(), b.dark_gray().into()];
+        f.render_widget(Clear, hud);
+        f.render_widget(
+            Paragraph::new(lines).centered().wrap(Wrap { trim: true }),
+            hud,
+        );
+    }
 
     // text box: shakes on a broken combo, border heats up with rank
     let shake = !calm() && t.broke.is_some_and(|(_, at)| since(Some(at), now) < SHAKE);

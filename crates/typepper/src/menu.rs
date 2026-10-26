@@ -97,6 +97,37 @@ fn slot(m: Mode) -> usize {
     }
 }
 
+/// How a mode plays, shown before its first key.
+pub fn rules(m: Mode) -> [&'static str; 2] {
+    match m {
+        Mode::Words(_) => [
+            "the clock starts on your first key and stops on the last word",
+            "your best is your wpm",
+        ],
+        Mode::Time(_) => [
+            "type as much as you can before the clock runs out",
+            "your best is your wpm",
+        ],
+        Mode::Zen => ["no clock, no best · just type", "finish whenever you like"],
+        Mode::Survival { .. } => [
+            "you start with 10s of fuel · every word adds 1.5s",
+            "it drains faster every 10 words · run dry and it's over",
+        ],
+        Mode::Lava { aim: Aim::Lock, .. } => [
+            "your first letter locks onto the lowest word starting with it",
+            "5 words land and you're cooked",
+        ],
+        Mode::Lava { aim: Aim::Free, .. } => [
+            "a word clears as soon as you've typed it",
+            "5 words land and you're cooked",
+        ],
+        Mode::Pursuit { .. } => [
+            "a cop chases your caret, faster every 10 words",
+            "a wrong key stops you cold · get caught and you're busted",
+        ],
+    }
+}
+
 /// "BLITZ 30s", "ZEN".
 pub fn label(m: Mode) -> String {
     m.name()
