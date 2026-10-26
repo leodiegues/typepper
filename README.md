@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://typepper.com"><img alt="typepper — a spicy little typing game for your terminal and browser: sprint, blitz, zen, survival, floor is lava and hot pursuit" src="assets/logo/og.png" width="720"></a>
+  <a href="https://typepper.com"><img alt="typepper — a spicy little typing game for your terminal and browser: sprint, blitz, zen, survival, floor is lava, hot pursuit and the hot one" src="assets/logo/og.png" width="720"></a>
 </p>
 
 <p align="center">
@@ -49,7 +49,7 @@ Modes, keys, sharing and the boards: [docs/](docs/README.md#for-players).
 
 ## A look
 
-Six modes on a carousel: sprint, blitz, zen, survival, floor is lava and hot pursuit.
+Seven modes on a carousel: sprint, blitz, zen, survival, floor is lava, hot pursuit and the hot one.
 
 <p align="center"><img alt="the mode carousel: cards blur toward the edges while each mode's scenery cross-fades in" src="assets/gifs/menu.gif" width="714"></p>
 
@@ -58,6 +58,8 @@ Six modes on a carousel: sprint, blitz, zen, survival, floor is lava and hot pur
 <p align="center"><img alt="FLOOR IS LAVA from level 10: words fall, one is locked onto and typed, missed words splash into rising lava until the run is cooked" src="assets/gifs/lava.gif" width="714"></p>
 
 **HOT PURSUIT:** a cop chases your caret down the text you've typed, leaving tire tracks; a wrong key stops you cold, and if the cop catches up you're busted.
+
+**THE HOT ONE:** three slips in a row (or every course) and a plate of peppers comes round; bite the hot one and you're done. Alone, or at a table with friends: host a room, share its four-letter code, and the last one standing wins.
 
 **Streaks:** the caret catches fire, fever turns the trail to embers, and a broken combo shatters.
 

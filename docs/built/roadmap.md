@@ -12,12 +12,15 @@ What's built, and what's open.
 |---|---|
 | 0.1.0 – 0.3.0 | the game: six modes, heat and ranks, bests, the web build |
 | 0.4.0 | the workspace and the deterministic engine; replays (`--replay`, `?replay=`); sharing (`u`); accounts (`typepper link`); the outbox; leaderboards (`b`) for day, week, month, year and all time; the server on Railway; the `online` setting; the version on the title screen |
+| next | THE HOT ONE: a seventh mode (strikes, plates, courses, chewing; replay format 2 for the picks), and rooms: the first thing played together, over a kept-open SSH channel or a WebSocket |
 
 ## Open
 
 | | Why | Notes |
 |---|---|---|
 | **Smooth deploys** | about 2 in 45 SSH connections fail at a deploy's switch | finish open sessions on SIGTERM; `overlapSeconds` / `drainingSeconds` in `railway.ts` |
+| **Rooms, next** | guests are `guest-N`; a dropped connection is out, with no way back in; a deploy ends every room | a name for guests; rejoining a game by seat; rooms kept across a deploy would need a store |
+| **Rooms on phones** | no ←/→ to turn the plate | the plate takes numbers already; a tap target per pepper |
 | **Sharing on touch screens** | phones have no `u` | a tap target on the results screen |
 | **Anonymous quota behind the TCP proxy** | keyless SSH callers may all arrive from Railway's address and share one quota | check the logged address in production; key the quota differently, or raise it |
 | **A GitHub token for linking** | GitHub's unauthenticated API allows 60 requests an hour per address, shared on Railway | an optional `TYPEPPER_GITHUB_TOKEN`, sent as a bearer header, `preserve()`d in `railway.ts` |

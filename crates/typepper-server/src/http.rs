@@ -5,8 +5,9 @@ use std::time::Instant;
 
 use axum::Router;
 use axum::body::Bytes;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Path, RawQuery, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, SET_COOKIE};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{AppendHeaders, IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
@@ -18,22 +19,33 @@ use crate::accounts;
 use crate::board::{self, Period};
 use crate::github;
 use crate::id::Id;
+use crate::room::{self, Rooms};
 use crate::runs::{self, Quota};
 
 #[derive(Clone)]
 struct Ctx {
     db: PgPool,
     quota: Arc<Quota>,
+    rooms: Arc<Rooms>,
 }
 
-pub async fn serve(db: PgPool, quota: Arc<Quota>, port: u16) -> std::io::Result<()> {
+/// The web game's origins (and a local `trunk serve`).
+fn game_origin(origin: &[u8]) -> bool {
+    origin == b"https://typepper.com"
+        || origin.starts_with(b"http://localhost:")
+        || origin.starts_with(b"http://127.0.0.1:")
+}
+
+pub async fn serve(
+    db: PgPool,
+    quota: Arc<Quota>,
+    rooms: Arc<Rooms>,
+    port: u16,
+) -> std::io::Result<()> {
     // the web game (and a local `trunk serve`) calls in from the browser
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {
-            let o = origin.as_bytes();
-            o == b"https://typepper.com"
-                || o.starts_with(b"http://localhost:")
-                || o.starts_with(b"http://127.0.0.1:")
+            game_origin(origin.as_bytes())
         }))
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([CONTENT_TYPE])
@@ -49,10 +61,12 @@ pub async fn serve(db: PgPool, quota: Arc<Quota>, port: u16) -> std::io::Result<
         .route("/auth/logout", post(logout))
         .route("/v1/runs/{id}", get(replay))
         .route("/v1/boards/{mode}", get(boards))
+        .route("/v1/room/new", get(room_new))
+        .route("/v1/room/{code}", get(room_join))
         .route("/{id}", get(page))
         .layer(DefaultBodyLimit::max(runs::MAX_BODY))
         .layer(cors)
-        .with_state(Ctx { db, quota });
+        .with_state(Ctx { db, quota, rooms });
     // "::" takes IPv4 too, and Railway's private network is IPv6
     let listener = tokio::net::TcpListener::bind(("::", port)).await?;
     axum::serve(listener, app).await
@@ -309,6 +323,93 @@ async fn boards(
             StatusCode::SERVICE_UNAVAILABLE.into_response()
         }
     }
+}
+
+/// `GET /v1/room/new`, a WebSocket: a new room for THE HOT ONE.
+async fn room_new(State(cx): State<Ctx>, headers: HeaderMap, ws: WebSocketUpgrade) -> Response {
+    room_ws(cx, headers, ws, None).await
+}
+
+/// `GET /v1/room/{code}`, a WebSocket: into that room.
+async fn room_join(
+    State(cx): State<Ctx>,
+    Path(code): Path<String>,
+    headers: HeaderMap,
+    ws: WebSocketUpgrade,
+) -> Response {
+    if !room::valid_code(&code) {
+        return (StatusCode::NOT_FOUND, "err no-room no room has that code\n").into_response();
+    }
+    room_ws(cx, headers, ws, Some(code)).await
+}
+
+/// The room's lines go back and forth as text messages, one line each
+/// (`room.rs`). A logged-in browser plays as its login; anyone else is a
+/// guest. CORS doesn't cover an upgrade, so the origin is checked here.
+async fn room_ws(
+    cx: Ctx,
+    headers: HeaderMap,
+    ws: WebSocketUpgrade,
+    code: Option<String>,
+) -> Response {
+    let origin = headers.get(ORIGIN).map(HeaderValue::as_bytes);
+    if !origin.is_some_and(game_origin) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let name = match session(&cx, &headers).await {
+        Ok(Some((_, login))) => login,
+        _ => String::new(),
+    };
+    ws.on_upgrade(move |socket| room_session(cx.rooms, socket, code, name))
+}
+
+async fn room_session(
+    rooms: Arc<Rooms>,
+    mut socket: WebSocket,
+    code: Option<String>,
+    name: String,
+) {
+    let (seat, mut lines) = match rooms.join(code.as_deref(), &name) {
+        Ok(joined) => joined,
+        Err(why) => {
+            let _ = say(&mut socket, why).await;
+            return;
+        }
+    };
+    loop {
+        tokio::select! {
+            line = lines.recv() => match line {
+                Some(line) => {
+                    if !say(&mut socket, line).await {
+                        break;
+                    }
+                }
+                None => break,
+            },
+            msg = socket.recv() => match msg {
+                Some(Ok(Message::Text(text))) => {
+                    for line in text.lines() {
+                        if let Err(why) = rooms.line(&seat, line).await
+                            && !say(&mut socket, why).await
+                        {
+                            break;
+                        }
+                    }
+                }
+                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
+                Some(Ok(_)) => {}
+            },
+        }
+    }
+    rooms.leave(&seat);
+}
+
+/// One line to the browser; false once it's gone.
+async fn say(socket: &mut WebSocket, line: String) -> bool {
+    socket
+        .send(Message::Text(format!("{line}\n").into()))
+        .await
+        .is_ok()
 }
 
 /// `GET /v1/runs/{id}`: the replay, for the web player. Never changes.

@@ -114,6 +114,21 @@ Every crate inherits the workspace version; a release tag ships the game, the
 site and the server. **Instead of** versioning the server on its own.
 **Cost:** a release redeploys the server even when it didn't change.
 
+## 15. Rooms relay inputs; the replay settles the game
+
+A room's server relays each player's inputs and otherwise trusts nothing
+live: who is out, and when, comes from playing the replay each player sends
+when their round ends, as a submission is played. The others are drawn
+from the relayed inputs on local rounds, which may drift from the player's
+own by the network's latency, and that's only ever cosmetic. **Instead of**
+a server that simulates every round in step (CPU for every room, and a
+clock to agree on) or one that believes a client's "I'm out". Transports
+stay the ones the game has: a long-lived `ssh` channel on desktop (no new
+dependency, decision 6) and a WebSocket in the browser. **Cost:** a player
+who never finishes their round holds the game, so every hot-one round ends
+by itself (the engine's courses and self-picking plates), and a dropped
+connection counts as out.
+
 ## 14. No database crate, no repository layer
 
 The server is the only program that touches Postgres, and each core module

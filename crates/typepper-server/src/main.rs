@@ -6,6 +6,7 @@ mod board;
 mod github;
 mod http;
 mod id;
+mod room;
 mod runs;
 mod ssh;
 
@@ -32,9 +33,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host_key = russh::keys::PrivateKey::from_openssh(var("TYPEPPER_SSH_HOST_KEY")?)?;
     migrate(&db).await?;
     let quota = Arc::new(runs::Quota::default());
-    // hourly: forget runs no board needs (docs/built/server.md, "The sweep")
+    let rooms = Arc::new(room::Rooms::default());
+    // hourly: forget runs no board needs (docs/built/server.md, "The sweep"),
+    // and rooms left open
     tokio::spawn({
         let db = db.clone();
+        let rooms = rooms.clone();
         async move {
             let mut hourly = tokio::time::interval(Duration::from_secs(3600));
             loop {
@@ -44,12 +48,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(n) => eprintln!("sweep: forgot {n} runs"),
                     Err(e) => eprintln!("sweep: {e}"),
                 }
+                match rooms.sweep() {
+                    0 => {}
+                    n => eprintln!("sweep: forgot {n} rooms"),
+                }
             }
         }
     });
     tokio::try_join!(
-        http::serve(db.clone(), quota.clone(), port("PORT", 8080)),
-        ssh::serve(host_key, db, quota, port("TYPEPPER_SSH_PORT", 2222)),
+        http::serve(db.clone(), quota.clone(), rooms.clone(), port("PORT", 8080)),
+        ssh::serve(host_key, db, quota, rooms, port("TYPEPPER_SSH_PORT", 2222)),
     )?;
     Ok(())
 }

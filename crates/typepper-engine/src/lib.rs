@@ -50,6 +50,10 @@ pub enum Mode {
     Pursuit {
         start_level: u32,
     },
+    /// Endless words at a dinner party: three wrong keys in a row (or every
+    /// course) and a plate of peppers comes round. Bite the hot one and
+    /// you're done typing (see `Test::plate`).
+    HotOne,
 }
 
 /// How FLOOR IS LAVA picks the word you're typing.
@@ -82,6 +86,11 @@ impl Mode {
         self.start_level().is_some()
     }
 
+    /// Scored in words (the leveled modes, and THE HOT ONE), not wpm.
+    pub fn words_scored(self) -> bool {
+        self.leveled() || self == Mode::HotOne
+    }
+
     /// What players call it: `BLITZ 30s`, `FLOOR IS LAVA lock-on`,
     /// `HOT PURSUIT`. Local bests are saved under these, so they stay put.
     pub fn name(self) -> String {
@@ -92,6 +101,7 @@ impl Mode {
             Mode::Survival { .. } => "SURVIVAL",
             Mode::Lava { .. } => "FLOOR IS LAVA",
             Mode::Pursuit { .. } => "HOT PURSUIT",
+            Mode::HotOne => "THE HOT ONE",
         };
         match self {
             Mode::Words(_) | Mode::Time(_) | Mode::Lava { .. } => format!("{card} {self}"),
@@ -117,6 +127,7 @@ impl Mode {
                 start_level,
             } => format!("lava:free:{start_level}"),
             Mode::Pursuit { start_level } => format!("pursuit:{start_level}"),
+            Mode::HotOne => "hot-one".into(),
         }
     }
 
@@ -142,6 +153,7 @@ impl Mode {
             ["pursuit", l] => Mode::Pursuit {
                 start_level: level(l)?,
             },
+            ["hot-one"] => Mode::HotOne,
             _ => return None,
         };
         // one spelling per mode: "time:030" isn't "time:30"
@@ -172,6 +184,7 @@ impl fmt::Display for Mode {
             Mode::Lava { aim: Aim::Lock, .. } => write!(f, "lock-on"),
             Mode::Lava { aim: Aim::Free, .. } => write!(f, "free"),
             Mode::Pursuit { .. } => write!(f, "pursuit"),
+            Mode::HotOne => write!(f, "hot one"),
         }
     }
 }
@@ -188,8 +201,10 @@ pub struct Setup {
 pub enum Input {
     Char(char),
     Backspace,
-    /// Zen's esc: the only mode the player ends.
+    /// Zen's esc, and the last one standing in THE HOT ONE: the player ends it.
     End,
+    /// THE HOT ONE: a pepper off the plate, by its place on it.
+    Pick(u8),
 }
 
 pub enum Game {
@@ -226,6 +241,10 @@ impl Round {
                 };
                 let mut t = Test::new(mode, &random_words(&mut rng, n));
                 t.rng = rng;
+                // the dinner's clock runs from the start, whether you type or not
+                if mode == Mode::HotOne {
+                    t.started = Some(t0);
+                }
                 Game::Test(t)
             }
         };
@@ -284,11 +303,20 @@ impl Round {
         }
         let now = self.at(at_ms);
         match (&mut self.game, input) {
+            // a plate on the table, or a mouthful: the keys wait, and don't go in the log
+            (Game::Test(t), Input::Char(_) | Input::Backspace)
+                if t.plate.is_some() || t.chewing.is_some() =>
+            {
+                return;
+            }
             (Game::Test(t), Input::Char(c)) => t.type_char(c, now),
             (Game::Test(t), Input::Backspace) => t.backspace(now),
-            (Game::Test(t), Input::End) if t.mode == Mode::Zen && t.started.is_some() => {
+            (Game::Test(t), Input::End)
+                if matches!(t.mode, Mode::Zen | Mode::HotOne) && t.started.is_some() =>
+            {
                 t.finish(now)
             }
+            (Game::Test(t), Input::Pick(n)) if t.can_pick(n) => t.pick(n, now),
             (Game::Lava(l), Input::Char(c)) => l.key(c, now),
             (Game::Lava(l), Input::Backspace) => l.backspace(),
             _ => return,
@@ -304,7 +332,7 @@ impl Round {
         Some(Outcome {
             score: match t.mode {
                 Mode::Zen => None,
-                m if m.leveled() => Some(t.words as f64),
+                m if m.words_scored() => Some(t.words as f64),
                 _ => Some(wpm.round()),
             },
             wpm,
@@ -388,12 +416,17 @@ mod tests {
             }
             let input = match &r.game {
                 _ if fix => Input::Backspace,
+                // a plate on the table: a pepper, after a moment's thought
+                Game::Test(t) if t.plate.is_some() => {
+                    Input::Pick(hands.below(t.plate.unwrap().peppers as usize) as u8)
+                }
                 _ if hands.below(30) == 0 => Input::Char('#'),
                 Game::Test(_) if mode == Mode::Zen && keys > 120 => Input::End,
                 Game::Test(t) => Input::Char(t.target[t.typed.len()]),
                 Game::Lava(l) => Input::Char(l.next_char().unwrap_or('x')),
             };
-            fix = input == Input::Char('#') && !matches!(mode, Mode::Pursuit { .. });
+            // wrong keys never land in pursuit or the hot one: nothing to take back
+            fix = input == Input::Char('#') && !matches!(mode, Mode::Pursuit { .. } | Mode::HotOne);
             r.input(key_ms, input);
             keys += 1;
             // a slow patch: the clock (fuel, cop, falling words) runs on
@@ -420,6 +453,7 @@ mod tests {
                 aim: Aim::Free,
                 start_level: 10,
             },
+            Mode::HotOne,
         ];
         for mode in modes {
             for (seed, frames) in [(1, &[8][..]), (2, &[16, 17]), (3, &[3, 41, 9, 120])] {
@@ -443,6 +477,12 @@ mod tests {
                     again.log, live.log,
                     "{what}: the replay logs the same inputs"
                 );
+                if mode == Mode::HotOne {
+                    assert!(a.bitten.is_some(), "{what}: the hot one ended it");
+                    assert!(a.bites.len() > 1, "{what}: it ate from several plates");
+                    assert_eq!(a.bites.len(), b.bites.len(), "{what}");
+                    assert!(live.log.iter().any(|(_, i)| matches!(i, Input::Pick(_))));
+                }
             }
         }
     }
@@ -515,6 +555,7 @@ mod tests {
             Mode::Words(25),
             Mode::Words(50),
             Mode::Zen,
+            Mode::HotOne,
         ] {
             keys.push((m, m.key()));
         }
@@ -539,6 +580,8 @@ mod tests {
             "lava:4",
             "zen:1",
             "Zen",
+            "hotone",
+            "hot-one:1",
         ] {
             assert_eq!(Mode::parse(junk), None, "{junk:?}");
         }
@@ -589,5 +632,24 @@ mod tests {
         };
         let out = simulate(setup, &[(100, Input::Char('#'))]).expect("the fuel runs out");
         assert_eq!(out.score, Some(0.0));
+        // the hot one ends on its own: the courses come, the plates pick
+        // themselves, and the last one has one pepper on it
+        let setup = Setup {
+            mode: Mode::HotOne,
+            seed: 1,
+        };
+        let out = simulate(setup, &[]).expect("the dinner ends by itself");
+        assert_eq!(out.score, Some(0.0));
+        let longest = (PLATE as u32 + 1) * (COURSE_SECS + PICK_SECS + BITE_SECS) as u32 * 1000;
+        assert!(out.ms <= longest, "{} ms", out.ms);
+        // and a pick that isn't on the table isn't a thing
+        let mut r = Round::new(setup);
+        r.input(100, Input::Pick(0));
+        r.input(200, Input::Char('x'));
+        assert_eq!(
+            r.log.len(),
+            1,
+            "the pick went nowhere, the key was a strike"
+        );
     }
 }

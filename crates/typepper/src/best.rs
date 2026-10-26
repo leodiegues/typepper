@@ -105,7 +105,7 @@ fn key(m: Mode) -> String {
 /// "87 wpm", "42 words".
 pub fn show(m: Mode, v: f64) -> String {
     match m {
-        m if m.leveled() => format!("{v:.0} words"),
+        m if m.words_scored() => format!("{v:.0} words"),
         _ => format!("{v:.0} wpm"),
     }
 }

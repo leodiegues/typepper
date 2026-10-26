@@ -50,7 +50,8 @@ trunk serve --port 8090          # http://127.0.0.1:8090
 ```
 
 Append `?demo` for the tour, `?replay=<id>` to watch a shared round, and
-`?api=http://localhost:8080` to talk to a local server.
+`?api=http://localhost:8080` to talk to a local server. Trying rooms? Add
+`--no-autoreload`: a rebuild reloads the page, and that drops the table.
 
 ### The server
 

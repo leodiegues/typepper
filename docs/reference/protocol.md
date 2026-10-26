@@ -43,6 +43,7 @@ for checking the door is open.
 | | `GET /auth/github` | web login (see [browsers](#browsers)) |
 | | `POST /auth/logout` | ends the browser's session |
 | `v1 replay <id>` | `GET /v1/runs/{id}` | a stored replay (hex over SSH, bytes over HTTP) |
+| `v1 room new`, `v1 room <code>` | `GET /v1/room/new`, `GET /v1/room/{code}` (a WebSocket) | a room for THE HOT ONE: the connection stays open (see [rooms](#rooms)) |
 | | `GET https://r.typepper.com/{id}` | a run's share page |
 | `ping` | `GET /health` | `pong`; readiness |
 
@@ -161,6 +162,58 @@ player's. `v1 unlink` answers `ok unlinked` (or `ok not-linked`).
 
 Ids are 8 base62 characters (`[0-9A-Za-z]`).
 
+## Rooms
+
+THE HOT ONE with friends ([rooms](../online/rooms.md)). A room is a
+four-letter code (`KXQP`: no vowels, no look-alikes; any case on the way in),
+up to eight seats, in the server's memory. Over SSH, `v1 room new` or
+`v1 room <code>` keeps the channel open: lines in on stdin, lines out on
+stdout, until the game hangs up (EOF). Over HTTP it's a WebSocket at
+`/v1/room/new` or `/v1/room/{code}`, text messages of one line each; the
+upgrade is allowed the same origins as CORS, and a session cookie seats a
+logged-in browser under its login (otherwise a guest, as an unlinked key
+is over SSH).
+
+Lines in, from the player:
+
+| Line | Does |
+|---|---|
+| `start` | the host (the lowest seat) starts a game: a countdown, then everyone plays |
+| `in <ms> <op>` | one input of the player's round, at its millisecond, as the replay's op number (format 2); relayed to the others |
+| `done <hex>` | the player's round is over: its replay, hex. The server plays it (it must be the hot one, this game's seed, these rules, and end) |
+| `ping` | `pong`; the game sends one every 10 s so nothing hangs up on a quiet lobby |
+
+Lines out, to the players:
+
+| Line | Means |
+|---|---|
+| `ok <code> <slot>` | seated: the room's code and your seat (0 is the first) |
+| `peer <slot> <name>` | who's at the table (everyone there when you sit down, then each arrival) |
+| `left <slot>` | they left |
+| `go <ms> <seed>` | a game starts in `ms` milliseconds, on that seed |
+| `in <slot> <ms> <op>` | someone else's input |
+| `out <slot> <words>` | their round ended (the server's words, from their replay) |
+| `win <slot>` | one left standing: the winner. Their game ends their round (`End`) and sends `done` |
+| `place <n> <slot> <words> <ms>` | the standings, once everyone's done: the last out first; out at the same millisecond, more words first |
+| `over` | the game's over; the room is a lobby again |
+| `err <code> <why>` | see below |
+
+```text
+err no-room no room has that code          joining; also `v1 room <junk>`
+err full that room has eight players
+err playing that room is mid-game, try again in a minute
+err busy too many rooms right now          (or this connection is in one already)
+err not-host only the host starts the game
+err not-playing no game is on              `done` outside a game
+err bad-line in <ms> <op>
+err bad-replay …, err old-engine …         a `done` that isn't this game's round
+err unknown-command …
+```
+
+A room is forgotten when its last player leaves, and by the hourly sweep
+once nobody has touched it for half an hour. A player's connection going
+mid-game counts them out.
+
 ## Health
 
 `GET /health` is readiness: **200** once Postgres answers, **503** when it
@@ -216,4 +269,6 @@ just goes back to the game.
   logged-in browser's player, else the connection's address (HTTP: the first
   `x-forwarded-for` address).
 - An SSH session idle for 30 s is closed; the game gives up on a call after
-  20 s.
+  20 s. A room's channel stays open: the game pings it every 10 s, and
+  `ssh` keeps it alive (`ServerAliveInterval=10`).
+- Rooms: eight players, a thousand rooms, half an hour untouched.

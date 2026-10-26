@@ -26,7 +26,7 @@ pub struct Group {
     modes: &'static [Mode],
 }
 
-pub const MENU: [Group; 6] = [
+pub const MENU: [Group; 7] = [
     Group {
         name: "SPRINT",
         blurb: "type the words, fast as you can",
@@ -79,7 +79,17 @@ pub const MENU: [Group; 6] = [
         scene: pursuit,
         modes: &[Mode::Pursuit { start_level: 1 }],
     },
+    Group {
+        name: "THE HOT ONE",
+        blurb: "three slips and a plate comes round · bite the hot one and you're done",
+        color: HOT_PINK,
+        scene: hot_one,
+        modes: &[Mode::HotOne],
+    },
 ];
+
+/// THE HOT ONE's color: a chili red gone pink, like nothing else on the carousel.
+pub const HOT_PINK: Rgb = (255, 60, 130);
 
 pub fn group(m: Mode) -> &'static Group {
     &MENU[slot(m)]
@@ -94,6 +104,7 @@ fn slot(m: Mode) -> usize {
         Mode::Survival { .. } => 3,
         Mode::Lava { .. } => 4,
         Mode::Pursuit { .. } => 5,
+        Mode::HotOne => 6,
     }
 }
 
@@ -145,7 +156,7 @@ impl Menu {
             target: 1,
             from: 1.0,
             at: now,
-            len: [1, 1, 0, 0, 0, 0],
+            len: [1, 1, 0, 0, 0, 0, 0],
             start: [0; MENU.len()],
             chip: (0, None),
             pressed: None,
@@ -330,7 +341,7 @@ fn wrapped_rows(text: &str, width: usize) -> u16 {
 }
 
 /// Fade everything already drawn toward the page, `k` 0..1 (behind a dialog).
-fn dim(buf: &mut Buffer, k: f64) {
+pub fn dim(buf: &mut Buffer, k: f64) {
     let page = page_rgb();
     for cell in buf.content.iter_mut() {
         if let Color::Rgb(r, g, b) = cell.fg {
@@ -421,6 +432,116 @@ pub fn pick(f: &mut Frame, p: &Pick, mode: Mode, bests: &Bests, now: Instant) {
     let hint = match crate::settings::touch() {
         true => "swipe pick · tap go · ✕ back",
         false => "←/→ pick · enter go · esc back",
+    };
+    f.render_widget(Line::from(hint.dark_gray()).centered(), row(6));
+}
+
+/// THE HOT ONE's table: alone, hosting a room, or joining one by its code.
+pub struct Party {
+    pub choice: usize,
+    /// The code being typed, for joining.
+    pub code: String,
+    from: usize,
+    moved: Option<Instant>,
+    opened: Instant,
+}
+
+const PARTY: [&str; 3] = ["solo", "host a room", "join a room"];
+/// The choice that takes a code.
+pub const JOIN: usize = 2;
+pub const CODE_LEN: usize = 4;
+
+impl Party {
+    pub fn new(now: Instant) -> Self {
+        Party {
+            choice: 0,
+            code: String::new(),
+            from: 0,
+            moved: None,
+            opened: now,
+        }
+    }
+
+    pub fn step(&mut self, dir: i64, now: Instant) {
+        self.from = self.choice;
+        self.choice = (self.choice as i64 + dir).rem_euclid(PARTY.len() as i64) as usize;
+        self.moved = Some(now);
+    }
+
+    /// A letter typed: it goes on the code (and the choice is joining).
+    pub fn letter(&mut self, c: char, now: Instant) {
+        if !c.is_ascii_alphabetic() {
+            return;
+        }
+        if self.choice != JOIN {
+            self.from = self.choice;
+            self.choice = JOIN;
+            self.moved = Some(now);
+        }
+        if self.code.len() < CODE_LEN {
+            self.code.push(c.to_ascii_uppercase());
+        }
+    }
+
+    fn chip_at(&self, now: Instant) -> f64 {
+        let k = since(self.moved, now) / CHIP;
+        let to = self.choice as f64;
+        match k < 1.0 {
+            true => self.from as f64 + (to - self.from as f64) * ease_out_back(k),
+            false => to,
+        }
+    }
+}
+
+pub fn party(f: &mut Frame, p: &Party, now: Instant) {
+    let area = f.area();
+    let k = (since(Some(p.opened), now) / POP).min(1.0);
+    dim(f.buffer_mut(), 0.6 * k);
+    let (r, g, b) = HOT_PINK;
+    let color = Color::Rgb(r, g, b);
+    let h = 9.min(area.height);
+    let w = ((46.0 * (0.7 + 0.3 * ease_out_back(k))).round() as u16).min(area.width);
+    let rect = Rect::new(
+        area.x + (area.width - w) / 2,
+        area.y + (area.height - h) / 2,
+        w,
+        h,
+    );
+    let block = Block::bordered()
+        .border_type(BorderType::Thick)
+        .border_style(color)
+        .title(Line::from(" THE HOT ONE ".bold()).centered());
+    let inner = block.inner(rect);
+    f.render_widget(Clear, rect);
+    f.render_widget(block, rect);
+    let row = |dy: u16| Rect::new(inner.x, inner.y + dy, inner.width, 1);
+    let labels: Vec<String> = PARTY.iter().map(|l| l.to_string()).collect();
+    options(f.buffer_mut(), row(1), &labels, p.chip_at(now), color);
+    let blink = ((since(Some(p.opened), now) * 2.0) as u64).is_multiple_of(2);
+    let say = match p.choice {
+        0 => Line::from("the table's all yours".dark_gray()),
+        1 => Line::from("you get a code for your friends".dark_gray()),
+        _ => {
+            let typed: String = p.code.chars().flat_map(|c| [c, ' ']).collect();
+            let left = "_ ".repeat(CODE_LEN - p.code.len());
+            let caret = if blink && p.code.len() < CODE_LEN {
+                "▌"
+            } else {
+                " "
+            };
+            Line::from(vec![
+                "code  ".dark_gray(),
+                typed.fg(color).bold(),
+                caret.fg(color),
+                left.dark_gray(),
+            ])
+        }
+    };
+    f.render_widget(say.centered(), row(3));
+    let hint = match (p.choice == JOIN, crate::settings::touch()) {
+        (true, _) => "type the code · enter join · esc back",
+        (false, true) => "swipe pick · tap go · ✕ back",
+        (false, false) => "←/→ pick · enter go · esc back",
     };
     f.render_widget(Line::from(hint.dark_gray()).centered(), row(6));
 }
@@ -1112,6 +1233,49 @@ fn pursuit(buf: &mut Buffer, area: Rect, focus: Rect, secs: f64, w: f64) {
     }
 }
 
+/// THE HOT ONE: a conveyor of plates slides along under the cards, five
+/// peppers on each; now and then one of them glows, and you can't tell
+/// which until it does.
+fn hot_one(buf: &mut Buffer, area: Rect, focus: Rect, secs: f64, w: f64) {
+    const PLATE: [&str; 2] = ["╭─────────────╮", "╰─────────────╯"];
+    let (left, right) = (area.left() as i32, area.right() as i32);
+    // the belt runs just under the cards, like pursuit's road
+    let y = focus.bottom() as i32;
+    if y + 1 >= area.bottom() as i32 {
+        return;
+    }
+    let span = area.width as f64 + 40.0;
+    let n = (span / 20.0).ceil() as i64;
+    for k in 0..n {
+        if !lane_on(hash(k as u64, 71, 0), w) {
+            continue;
+        }
+        // right to left, wrapping, each plate 20 cells apart
+        let x = right + 20 - ((secs * 9.0 + k as f64 * 20.0).rem_euclid(span)) as i32;
+        let china = (150, 150, 160);
+        for (dy, row) in PLATE.iter().enumerate() {
+            for (j, ch) in row.chars().enumerate() {
+                let mut utf8 = [0; 4];
+                let sym = ch.encode_utf8(&mut utf8);
+                dab(buf, x + j as i32, y + dy as i32, sym, china, 0.5 * w);
+            }
+        }
+        // the hot one glows for a moment, on one plate at a time
+        let lit = ((secs * 0.7) as i64 + k).rem_euclid(5) as usize;
+        let glow = 0.5 + 0.5 * (secs * 5.0).sin();
+        for i in 0..5 {
+            let c = match i == lit {
+                true => mix((60, 160, 60), HOT_PINK, glow),
+                false => (60, 160, 60),
+            };
+            let px = x + 2 + i as i32 * 3;
+            if px > left && px < right {
+                dab(buf, px, y, "◗", c, 0.85 * w);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1149,13 +1313,11 @@ mod tests {
         assert_eq!((m.sel(), m.mode()), (1, Mode::Time(30)));
         m.swipe(-1, t0);
         m.swipe(-1, t0);
-        assert_eq!(m.sel(), 5, "wraps past the first card");
+        assert_eq!(m.sel(), 6, "wraps past the first card");
         m.length(1, t0);
-        assert_eq!(
-            m.mode(),
-            Mode::Pursuit { start_level: 1 },
-            "single-length modes stay put"
-        );
+        assert_eq!(m.mode(), Mode::HotOne, "single-length modes stay put");
+        m.swipe(-1, t0);
+        assert_eq!(m.mode(), Mode::Pursuit { start_level: 1 });
         m.swipe(-1, t0);
         assert_eq!(
             m.mode(),
@@ -1173,11 +1335,12 @@ mod tests {
             }
         );
         let done = t0 + Duration::from_secs(1);
-        assert_eq!(m.scroll(done), -2.0);
+        assert_eq!(m.scroll(done), -3.0);
         assert!(
-            m.scroll(t0 + Duration::from_millis(200)) < -2.0,
+            m.scroll(t0 + Duration::from_millis(200)) < -3.0,
             "overshoots"
         );
+        m.swipe(1, done);
         m.swipe(1, done);
         m.swipe(1, done);
         m.length(-1, done);

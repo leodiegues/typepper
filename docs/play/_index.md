@@ -11,5 +11,5 @@ extra:
 Getting typepper, and playing it.
 
 - [Install](install.md): the browser, the terminal, and keeping it current
-- [Modes](modes.md): the six modes, heat, and what counts as a best
+- [Modes](modes.md): the seven modes, heat, and what counts as a best
 - [Keys and settings](keys.md): every key, and the settings dialog

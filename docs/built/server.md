@@ -22,6 +22,7 @@ src/
 ├── ssh.rs        # the SSH door: auth, commands → core → answer lines
 ├── runs.rs       # submit (decode, simulate, store), replay bytes, share pages, the quota
 ├── board.rs      # boards, ranks, the sweep
+├── room.rs       # rooms for THE HOT ONE: seats, the seed, relaying inputs, verifying finished rounds
 ├── accounts.rs   # players, their ssh keys and web sessions: link, unlink, sign in and out, who a key or cookie is
 ├── github.rs     # a login's public keys and numeric id, and who logged in, from GitHub
 └── id.rs         # random base62 ids, with_new_id
@@ -227,6 +228,32 @@ select rank() over (order by b.score desc, b.created_at) as rank, …
 - Runs from every engine version share a board. If a balance change ever
   skews scores, the fix is one more condition, `and engine = $3`.
 
+## Rooms
+
+`room::Rooms` is every room, in memory behind one mutex (one server, and a
+room outlives nobody): a code, its seats, the game's seed, and a lobby /
+playing state. Both doors only move lines: `http.rs` over a WebSocket,
+`ssh.rs` over a `v1 room` channel it keeps open (the room's lines reach it
+through the session's `Handle`; a `Seated` guard leaves the room when the
+connection drops, however it drops). The lines are in
+[the protocol](../reference/protocol.md#rooms).
+
+- **Seats stay put** when someone leaves (the others know them by number);
+  the host is the lowest seat taken.
+- **`start`** draws a new seed and tells everyone `go 3000 <seed>`; from
+  then on `in` lines are relayed to everyone else, unread.
+- **`done <hex>`** is verified the way a submission is: decoded, checked to be
+  the hot one on this seed and these rules, played with `simulate` on a
+  blocking thread. Its outcome (when the round ended, how many words) is what
+  the room believes; the player's own screen is never asked.
+- **Settling:** after each `out` or `left` mid-game, one player left standing
+  is told `win` (their game ends their round and sends it); none left, the
+  standings go out (`place` lines: the last out first, then more words) and
+  the room is a lobby again.
+- Rooms don't count against the submit quota, and nothing is stored: a
+  room round goes to the boards the usual way, from the player's own outbox.
+- The hourly sweep forgets rooms untouched for half an hour.
+
 ## The sweep
 
 Hourly, in `main.rs`: delete runs older than **8 days** unless they're a
@@ -268,6 +295,7 @@ table. Entries older than an hour are forgotten at each call.
 | link, relink after a rename, unlink | Postgres |
 | a session signs in, is looked up, and signs out | Postgres |
 | boards: best per player, periods, ties, anonymous runs; the sweep keeps exactly what boards need | Postgres |
+| rooms: making, joining (any case), the host alone starts, leaving and the last one out closing the room; a game relaying inputs, refusing another game's replay, `win` for the last one standing, the standings' order, another game on a new seed; leaving mid-game; codes and the sweep | nothing |
 
 The Postgres tests run when `TYPEPPER_TEST_DATABASE_URL` is set, migrating
 it first, and pass with a note otherwise. CI provides Postgres 18, Railway's

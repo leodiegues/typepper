@@ -7,6 +7,7 @@ mod lava;
 mod menu;
 mod online;
 mod pepper;
+mod room;
 mod settings;
 mod store;
 mod theme;
