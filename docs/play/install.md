@@ -42,6 +42,8 @@ cargo install --git https://github.com/leodiegues/typepper typepper
 
 Then run `typepper`.
 
+typepper is also listed on [The Terminal Index](https://cli.masoko.net/tools/typepper/).
+
 ## Staying current
 
 ```sh
