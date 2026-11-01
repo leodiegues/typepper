@@ -3,7 +3,7 @@
 # Bases are pinned by digest (dependabot bumps them); keep the tag's Rust in
 # step with rust-toolchain.toml.
 
-FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.0-slim-bookworm@sha256:b4b459d305bee99c8f8200212c46276108af90b0501386e1339336c2e03c81a2 AS chef
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.1-slim-bookworm@sha256:e005be5aebbfe6316c3e679f39a0317bae80175dc75dfb0b2e179f82a7304780 AS chef
 WORKDIR /app
 
 FROM chef AS planner
