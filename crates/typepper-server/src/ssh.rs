@@ -12,6 +12,7 @@ use russh::{Channel, ChannelId};
 use sqlx::PgPool;
 
 use crate::id::Id;
+use crate::room::{self, Rooms, Seat};
 use crate::runs::{self, Quota};
 use crate::{accounts, board, github};
 
@@ -23,6 +24,7 @@ pub async fn serve(
     key: PrivateKey,
     db: PgPool,
     quota: Arc<Quota>,
+    rooms: Arc<Rooms>,
     port: u16,
 ) -> std::io::Result<()> {
     let config = russh::server::Config {
@@ -36,10 +38,12 @@ pub async fn serve(
     let mut door = Door {
         db,
         quota,
+        rooms,
         who: String::new(),
         uploads: HashMap::new(),
         key: None,
         github: None,
+        seat: None,
     };
     door.run_on_address(Arc::new(config), ("::", port)).await
 }
@@ -49,6 +53,7 @@ pub async fn serve(
 struct Door {
     db: PgPool,
     quota: Arc<Quota>,
+    rooms: Arc<Rooms>,
     /// Whose quota this is: their key's fingerprint, else where they came from.
     who: String,
     /// `v1 submit` channels still reading their stdin.
@@ -57,6 +62,21 @@ struct Door {
     key: Option<(String, Vouch)>,
     /// A linking login's keys on GitHub, asked once per connection.
     github: Option<(String, Vec<String>)>,
+    /// `v1 room`: the channel the room's lines go over, and the seat (left
+    /// when the connection goes).
+    seat: Option<(ChannelId, Arc<Seated>, Vec<u8>)>,
+}
+
+/// A seat in a room, left when dropped (however the connection ended).
+struct Seated {
+    rooms: Arc<Rooms>,
+    seat: Seat,
+}
+
+impl Drop for Seated {
+    fn drop(&mut self) {
+        self.rooms.leave(&self.seat);
+    }
 }
 
 /// What a key that got in stands for.
@@ -118,6 +138,7 @@ impl Server for Door {
             uploads: HashMap::new(),
             key: None,
             github: None,
+            seat: None,
             ..self.clone()
         }
     }
@@ -199,6 +220,11 @@ impl Handler for Door {
             b"v1 unlink" => self.unlink().await,
             c if c.starts_with(b"v1 board ") => self.board(c).await,
             c if c.starts_with(b"v1 replay ") => self.replay(c).await,
+            c if c.starts_with(b"v1 room ") => match self.room(channel, c, session) {
+                // the channel stays open: the room's lines go over it
+                Ok(()) => return session.channel_success(channel),
+                Err(why) => (why, 1),
+            },
             _ => run(command),
         };
         reply(channel, out, status, session)
@@ -210,6 +236,20 @@ impl Handler for Door {
         data: &[u8],
         session: &mut Session,
     ) -> Result<(), Self::Error> {
+        // a room's lines, as they come (a line may come in pieces)
+        if let Some((ch, seated, buf)) = &mut self.seat
+            && *ch == channel
+        {
+            buf.extend_from_slice(data);
+            while let Some(end) = buf.iter().position(|&b| b == b'\n') {
+                let line = String::from_utf8_lossy(&buf[..end]).into_owned();
+                buf.drain(..=end);
+                if let Err(why) = seated.rooms.line(&seated.seat, &line).await {
+                    session.data(channel, format!("{why}\n").into_bytes())?;
+                }
+            }
+            return Ok(());
+        }
         let Some(body) = self.uploads.get_mut(&channel) else {
             return Ok(());
         };
@@ -227,6 +267,13 @@ impl Handler for Door {
         channel: ChannelId,
         session: &mut Session,
     ) -> Result<(), Self::Error> {
+        // the game hung up on its room
+        if self.seat.as_ref().is_some_and(|(ch, ..)| *ch == channel) {
+            self.seat = None;
+            session.exit_status_request(channel, 0)?;
+            session.eof(channel)?;
+            return session.close(channel);
+        }
         let Some(body) = self.uploads.remove(&channel) else {
             return Ok(());
         };
@@ -317,6 +364,45 @@ impl Door {
                 ("err busy try later\n".into(), 1)
             }
         }
+    }
+
+    /// `v1 room new` / `v1 room <code>`: into a room for THE HOT ONE, as the
+    /// linked player or a guest. The channel stays open: lines in on stdin,
+    /// the room's lines out on stdout, until the game hangs up.
+    fn room(
+        &mut self,
+        channel: ChannelId,
+        command: &[u8],
+        session: &mut Session,
+    ) -> Result<(), String> {
+        let arg = std::str::from_utf8(&command[b"v1 room ".len()..]).unwrap_or("");
+        let code = match arg {
+            "new" => None,
+            c if room::valid_code(c) => Some(c),
+            _ => return Err("err no-room v1 room <new|code>\n".into()),
+        };
+        if self.seat.is_some() {
+            return Err("err busy this connection is in a room already\n".into());
+        }
+        let name = self.player().map(|(_, login)| login).unwrap_or_default();
+        let (seat, mut lines) = self
+            .rooms
+            .join(code, &name)
+            .map_err(|why| format!("{why}\n"))?;
+        let handle = session.handle();
+        tokio::spawn(async move {
+            while let Some(line) = lines.recv().await {
+                if handle.data(channel, format!("{line}\n")).await.is_err() {
+                    break;
+                }
+            }
+        });
+        let seated = Seated {
+            rooms: self.rooms.clone(),
+            seat,
+        };
+        self.seat = Some((channel, Arc::new(seated), Vec::new()));
+        Ok(())
     }
 
     /// `v1 unlink`: the key that logged in lets go of its player.

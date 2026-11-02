@@ -15,8 +15,9 @@ use crate::boards::{self, Boards};
 use crate::engine::{Game, Input, LEVELS, Mode, Replay, Round, Setup, Test};
 use crate::history::{self, History};
 use crate::lava;
-use crate::menu::{self, Dialog, Menu, Pick};
+use crate::menu::{self, Dialog, Menu, Party, Pick};
 use crate::online::{self, Call};
+use crate::room;
 use crate::settings::{ROWS, Settings, touch};
 use crate::ui;
 
@@ -41,6 +42,8 @@ enum Screen {
     Watch(Watch),
     Boards(Boards),
     History(History),
+    /// THE HOT ONE with friends (the room's own round is in it).
+    Room(room::Room),
 }
 
 /// Rounds going up: a shared one (anonymous), or a linked player's outbox.
@@ -65,17 +68,40 @@ struct Watch {
 }
 
 impl Screen {
-    /// The round on screen, played or watched (or just finished).
+    /// The round on screen, played or watched (or just finished): the ones
+    /// tab restarts and enter plays again.
     fn round(&self) -> Option<&Round> {
         match self {
             Screen::Play(r) => Some(r),
             Screen::Watch(w) => Some(&w.round),
-            Screen::Title | Screen::Boards(_) | Screen::History(_) => None,
+            Screen::Title | Screen::Boards(_) | Screen::History(_) | Screen::Room(_) => None,
         }
     }
 
     fn test(&self) -> Option<&Test> {
         self.round().map(Round::test)
+    }
+
+    /// The round the player is typing (alone, or at a room's table).
+    fn own(&self) -> Option<&Round> {
+        match self {
+            Screen::Play(r) => Some(r),
+            Screen::Room(room) => room.round.as_ref(),
+            _ => None,
+        }
+    }
+
+    fn own_mut(&mut self) -> Option<&mut Round> {
+        match self {
+            Screen::Play(r) => Some(r),
+            Screen::Room(room) => room.round.as_mut(),
+            _ => None,
+        }
+    }
+
+    /// Whatever test is on screen, yours or watched.
+    fn any_test(&self) -> Option<&Test> {
+        self.round().or(self.own()).map(Round::test)
     }
 }
 
@@ -94,6 +120,8 @@ pub struct App {
     dialog: Option<Dialog>,
     /// The starting-level picker, over a leveled game before it begins.
     pick: Option<Pick>,
+    /// THE HOT ONE's table picker (solo, host, join), over the menu.
+    party: Option<Party>,
     /// The finished test's result against your best (once it's been scored).
     outcome: Option<Outcome>,
     scored: bool,
@@ -114,6 +142,9 @@ pub struct App {
     synced: Option<Call>,
     /// The results screen's round in the history (`history::Round::at`).
     played: Option<u64>,
+    /// THE HOT ONE: the pepper hovered on the plate, and which plate that was
+    /// (a new plate starts back at the first).
+    pepper: (usize, Option<Instant>),
 }
 
 impl App {
@@ -141,6 +172,7 @@ impl App {
             loaded: (settings.font, crate::theme::is_light()),
             dialog: None,
             pick: None,
+            party: None,
             outcome: None,
             scored: false,
             since: now,
@@ -153,6 +185,7 @@ impl App {
             strip: None,
             synced,
             played: None,
+            pepper: (0, None),
         }
     }
 
@@ -194,6 +227,30 @@ impl App {
             }
             return false;
         }
+        // THE HOT ONE's table: alone, hosting, or joining by code
+        if let Some(p) = &mut self.party {
+            match key {
+                Key::Left | Key::Up => p.step(-1, now),
+                Key::Right | Key::Down => p.step(1, now),
+                Key::Backspace => {
+                    p.code.pop();
+                }
+                Key::Char(c) if c.is_ascii_alphabetic() => p.letter(c, now),
+                Key::Enter | Key::Char(' ') => {
+                    let next = match (p.choice, p.code.len()) {
+                        (menu::JOIN, n) if n < menu::CODE_LEN => return false,
+                        (menu::JOIN, _) => Screen::Room(room::Room::open(Some(&p.code))),
+                        (1, _) => Screen::Room(room::Room::open(None)),
+                        _ => practice(Mode::HotOne),
+                    };
+                    self.party = None;
+                    self.go(next, now);
+                }
+                Key::Esc => self.party = None,
+                _ => {}
+            }
+            return false;
+        }
         // in any test: tab restarts (at once mid-test; every other screen change
         // dissolves), enter on the results plays again, from the same level
         let test = self.screen.test();
@@ -204,6 +261,32 @@ impl App {
             self.go(practice(mode), now);
             if instant {
                 self.fade = None;
+            }
+            return false;
+        }
+        // the hot one, a plate on the table: ←/→ hover a pepper, enter (or
+        // its number) bites it; nothing else gets through but esc
+        if let Some(r) = self.screen.own_mut()
+            && let Some(p) = r.test().plate
+            && !matches!(key, Key::Esc)
+        {
+            let n = p.peppers as usize;
+            // a plate served by this very key: the hover starts on the first
+            if self.pepper.1 != Some(p.served) {
+                self.pepper = (0, Some(p.served));
+            }
+            let (hover, _) = &mut self.pepper;
+            match key {
+                Key::Left | Key::Up => *hover = (*hover + n - 1) % n,
+                Key::Right | Key::Down => *hover = (*hover + 1) % n,
+                Key::Enter | Key::Char(' ') => r.input(r.ms(now), Input::Pick(*hover as u8)),
+                Key::Char(c) if c.is_ascii_digit() && c != '0' => {
+                    let i = c as usize - '1' as usize;
+                    if i < n {
+                        r.input(r.ms(now), Input::Pick(i as u8));
+                    }
+                }
+                _ => {}
             }
             return false;
         }
@@ -255,7 +338,7 @@ impl App {
                 Screen::Title => !self.menu.pressing(),
                 Screen::Boards(_) => true,
                 Screen::Play(r) => r.test().finished.is_some(),
-                Screen::Watch(_) | Screen::History(_) => false,
+                Screen::Watch(_) | Screen::History(_) | Screen::Room(_) => false,
             }
         {
             match self.account.take() {
@@ -343,6 +426,18 @@ impl App {
                 Key::Char(c) => r.input(r.ms(now), Input::Char(c)),
                 _ => {}
             },
+            // at the table: your round takes the keys while a game's on;
+            // otherwise enter starts one (the host) or goes back to the lobby
+            (Screen::Room(room), key) => match (room.playing(), key) {
+                (true, Key::Char(c)) => {
+                    if let Some(r) = &mut room.round {
+                        r.input(r.ms(now), Input::Char(c));
+                    }
+                }
+                (true, _) => {}
+                (false, Key::Enter | Key::Char(' ')) => room.enter(),
+                (false, _) => {}
+            },
             // watching: hands off (esc leaves, tab or enter plays the mode yourself)
             (Screen::Watch(_), _) => {}
         }
@@ -405,6 +500,16 @@ impl App {
         // leveled modes ask for a starting level before they begin
         let mut ask = None;
         match &mut self.screen {
+            // the hot one asks who's at the table first (not the demo, not offline)
+            Screen::Title
+                if self.menu.press_done(now)
+                    && self.menu.mode() == Mode::HotOne
+                    && !self.settings.offline
+                    && !touring =>
+            {
+                self.menu.back(now);
+                self.party = Some(Party::new(now));
+            }
             Screen::Title if self.menu.press_done(now) => {
                 let mode = self.menu.mode();
                 next = Some(practice(mode));
@@ -429,6 +534,12 @@ impl App {
                 }
             }
             Screen::History(_) => {}
+            Screen::Room(room) => {
+                // a new game: a fresh round of yours to score
+                if room.tick(now) {
+                    (self.outcome, self.scored) = (None, false);
+                }
+            }
             Screen::Watch(w) => {
                 let ms = w.round.ms(now);
                 while let Some(&(at, input)) = w.inputs.get(w.next).filter(|(at, _)| *at <= ms) {
@@ -448,15 +559,22 @@ impl App {
                 r.advance(r.ms(now));
             }
         }
+        // a new plate: the hover starts back at the first pepper
+        if let Some(t) = self.screen.any_test() {
+            let served = t.plate.map(|p| p.served);
+            if served != self.pepper.1 {
+                self.pepper = (0, served);
+            }
+        }
         // finished: dissolve into results, and score it (demo runs don't count)
-        if let Some(r) = self.screen.round()
+        if let Some(r) = self.screen.round().or(self.screen.own())
             && let Some(round) = r.result()
             && !self.scored
         {
             self.scored = true;
             self.fade = self.frame.take().map(|b| (b, now));
             // a watched replay is someone's past round: nothing to keep
-            if let Screen::Play(r) = &self.screen {
+            if let Some(r) = self.screen.own() {
                 // the last round, for `--replay` (and, later, sharing)
                 crate::store::write_bytes("last.replay", &Replay::of(r).encode());
                 if self.bot.is_none() {
@@ -500,7 +618,11 @@ impl App {
                 if let Some(d) = &self.dialog {
                     menu::dialog(f, d, &self.settings, now);
                 }
+                if let Some(p) = &self.party {
+                    menu::party(f, p, now);
+                }
             }
+            Screen::Room(room) => room::draw(f, room, self.pepper.0, now),
             Screen::Boards(b) => boards::draw(f, b, self.account.as_deref(), now),
             Screen::History(h) => {
                 let status = self.history_status();
@@ -511,7 +633,12 @@ impl App {
                 _ => {
                     let hint = self.share_hint();
                     let strip = self.strip_shown();
-                    if let Some(area) = ui::draw(f, r.test(), self.outcome, hint.as_deref(), strip)
+                    let hover = match self.screen {
+                        Screen::Play(_) => Some(self.pepper.0),
+                        _ => None,
+                    };
+                    if let Some(area) =
+                        ui::draw(f, r.test(), self.outcome, hint.as_deref(), strip, hover)
                     {
                         // a linked round on its way up: its board comes after it
                         let saving = self.account.is_some()
@@ -637,6 +764,7 @@ impl App {
         self.since = now;
         (self.outcome, self.scored) = (None, false);
         self.pick = None;
+        self.party = None;
         self.strip = None;
         self.played = None;
         self.fade = self.frame.take().map(|b| (b, now));
@@ -740,13 +868,22 @@ impl Bot {
             let input = match &r.game {
                 // FLOOR IS LAVA: finishes the word it's on, or starts the lowest one
                 Game::Lava(l) => l.next_char().map(Input::Char),
+                // THE HOT ONE: a plate on the table gets a moment's thought, then a bite
+                Game::Test(t) if t.plate.is_some() => {
+                    let p = t.plate.unwrap();
+                    if r.ms(at) < r.ms(p.served) + 900 {
+                        self.next = p.served + Duration::from_millis(900);
+                        continue;
+                    }
+                    Some(Input::Pick(rng.random_range(0..p.peppers)))
+                }
                 Game::Test(_) if self.fixing => {
                     self.fixing = false;
                     Some(Input::Backspace)
                 }
                 Game::Test(t) if rng.random_bool(self.typos) => {
-                    // pursuit: a miss stays put, so there's nothing to take back
-                    self.fixing = !matches!(t.mode, Mode::Pursuit { .. });
+                    // pursuit, the hot one: a miss stays put, nothing to take back
+                    self.fixing = !matches!(t.mode, Mode::Pursuit { .. } | Mode::HotOne);
                     Some(Input::Char('#'))
                 }
                 Game::Test(t) => t.target.get(t.typed.len()).map(|&c| Input::Char(c)),
@@ -786,6 +923,41 @@ mod tests {
         bot.typos = 0.0;
         bot.drive(&mut r, bot.next);
         r
+    }
+
+    /// THE HOT ONE's card asks who's at the table: letters typed are a room
+    /// code, and enter with four of them goes to that room.
+    #[test]
+    fn the_hot_ones_card_takes_a_room_code() {
+        let mut app = App::new(None, None);
+        app.settings.offline = false;
+        let t0 = Instant::now();
+        app.key(Key::Left);
+        app.key(Key::Left);
+        assert_eq!(app.menu.mode(), Mode::HotOne);
+        app.key(Key::Enter);
+        // the press animation plays out, then the table picker opens
+        std::thread::sleep(Duration::from_millis(250));
+        app.tick(Instant::now());
+        assert!(app.party.is_some(), "the picker is up");
+        for c in "pcgv".chars() {
+            app.key(Key::Char(c));
+        }
+        app.key(Key::Char('x'));
+        let p = app.party.as_ref().unwrap();
+        assert_eq!(
+            (p.choice, p.code.as_str()),
+            (menu::JOIN, "PCGV"),
+            "four letters, no more"
+        );
+        app.key(Key::Backspace);
+        assert_eq!(app.party.as_ref().unwrap().code, "PCG");
+        // three letters don't join anywhere (enter would run the system ssh)
+        app.key(Key::Enter);
+        assert!(app.party.is_some() && matches!(app.screen, Screen::Title));
+        app.key(Key::Esc);
+        assert!(app.party.is_none());
+        let _ = t0;
     }
 
     #[test]

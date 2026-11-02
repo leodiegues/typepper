@@ -16,7 +16,7 @@ dist = false
 release = false
 
 [dependencies]
-axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
 rand = "0.10.3"
 # sha256 for session secrets; already built for russh
 ring = "0.17.14"

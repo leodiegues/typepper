@@ -151,7 +151,7 @@ fn share_page(id: Id, key: &str, score: Option<f64>, wpm: f64) -> String {
         _ => m.name(),
     });
     let result = match (mode, score) {
-        (Some(m), Some(s)) if m.leveled() => format!("{s:.0} words"),
+        (Some(m), Some(s)) if m.words_scored() => format!("{s:.0} words"),
         (_, Some(s)) => format!("{s:.0} wpm"),
         _ => format!("{wpm:.0} wpm"),
     };
@@ -216,6 +216,8 @@ pub(crate) mod tests {
         assert!(page.contains("112 wpm · BLITZ 30s"));
         let page = share_page(Id(1), "zen", None, 71.6);
         assert!(page.contains("72 wpm · ZEN"));
+        let page = share_page(Id(1), "hot-one", Some(48.0), 71.6);
+        assert!(page.contains("48 words · THE HOT ONE"));
     }
 
     /// A database to test against (`TYPEPPER_TEST_DATABASE_URL`; CI has

@@ -16,7 +16,7 @@ The bottom line of every screen says what its keys do. All of them:
 |---|---|
 | ←/→ | pick the mode |
 | ↑/↓ | its length (floor is lava: lock-on or free aim) |
-| enter or space | play |
+| enter or space | play (the hot one asks first: solo, host a room, or join one by its code) |
 | b | the boards for this mode |
 | l | browser only: log in with GitHub, or log out |
 | h | your rounds (the history) |
@@ -32,7 +32,18 @@ Survival, floor is lava and hot pursuit then ask for a starting level: ←/→
 |---|---|
 | tab | start over, at once |
 | backspace | take back a letter |
+| ←/→, enter, 1-6 | the hot one, a plate on the table: turn it, bite the pepper (or bite by its number) |
 | esc | the menu; in zen, finish the round |
+
+## Rooms
+
+THE HOT ONE's table (see [rooms](../online/rooms.md)).
+
+| Key | Does |
+|---|---|
+| enter | the host starts a game; after one, back to the table |
+| letters, backspace | the code, when joining |
+| esc | leave the table |
 
 ## The results
 

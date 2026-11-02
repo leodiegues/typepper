@@ -46,6 +46,8 @@ anonymous.
   Today's board opens beside the chart, with your row in it.
 - Offline? Rounds wait on your machine and go up with the next one played
   online.
+- At a table ([rooms](rooms.md)) you're seated under your login, and the
+  rounds you play there go up like the rest.
 - Settings → online: off stops it all. Your rounds stay on your machine.
 
 ## Unlinking

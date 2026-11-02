@@ -25,7 +25,8 @@ account, no name: an unlinked share is anonymous.
 
 Linked, or logged in in the browser? Your rounds go up on their own, under
 your login (see [link your key](link.md)), and u only retries one that
-couldn't.
+couldn't. A round played at a table ([rooms](rooms.md)) is one of yours
+like any other: it goes up the same way, and can be shared the same way.
 
 ## How long a link lasts
 
