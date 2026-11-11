@@ -5,7 +5,11 @@
 //! "TPR" | format u8 | engine u32 LE | mode key (u8 length + UTF-8) | seed u64 LE
 //!       | count varint | count × (Δms varint, op varint)
 //! op: 0 Backspace, 1 End, n ≥ 2 the char n − 2
+//!     format 2 only: n ≥ 0x110002 the pick n − 0x110002 (THE HOT ONE)
 //! ```
+//!
+//! A replay is written as format 1 unless it has a pick in it: games before
+//! picks existed still read every other round.
 //!
 //! The mode travels as its text key (`Mode::key`), not as `Mode`, so this
 //! module only knows `Input`: the header stays readable whatever the rules
@@ -17,8 +21,12 @@ use std::fmt;
 use crate::Input;
 
 const MAGIC: &[u8; 3] = b"TPR";
-/// This layout. A reader refuses any other.
-pub const FORMAT: u8 = 1;
+/// The newest layout; readers take this one and the one before it.
+pub const FORMAT: u8 = 2;
+/// Format 1: the same bytes, with no picks among the ops.
+pub const FORMAT_1: u8 = 1;
+/// Format 2: the first op that isn't a character; `Pick(n)` is this plus `n`.
+const PICK: u64 = char::MAX as u64 + 3;
 /// The biggest replay anyone takes: about 7 hours of zen at 60 wpm.
 pub const MAX_BYTES: usize = 1 << 20;
 const MAX_MODE: usize = 32;
@@ -68,7 +76,8 @@ impl Replay {
     pub fn encode(&self) -> Vec<u8> {
         let mut b = Vec::with_capacity(32 + self.inputs.len() * 3);
         b.extend(MAGIC);
-        b.push(FORMAT);
+        let picks = self.inputs.iter().any(|(_, i)| matches!(i, Input::Pick(_)));
+        b.push(if picks { FORMAT } else { FORMAT_1 });
         b.extend(self.engine.to_le_bytes());
         b.push(self.mode.len() as u8);
         b.extend(self.mode.as_bytes());
@@ -78,14 +87,7 @@ impl Replay {
         for &(ms, input) in &self.inputs {
             varint(&mut b, (ms - last).into());
             last = ms;
-            varint(
-                &mut b,
-                match input {
-                    Input::Backspace => 0,
-                    Input::End => 1,
-                    Input::Char(c) => c as u64 + 2,
-                },
-            );
+            varint(&mut b, op(input));
         }
         b
     }
@@ -97,10 +99,10 @@ impl Replay {
         if r.take(3)? != MAGIC {
             return Err(Bad::NotAReplay);
         }
-        match r.byte()? {
-            FORMAT => {}
+        let format = match r.byte()? {
+            f @ (FORMAT_1 | FORMAT) => f,
             n => return Err(Bad::Format(n)),
-        }
+        };
         let engine = u32::from_le_bytes(r.take(4)?.try_into().unwrap());
         let len = r.byte()? as usize;
         if len > MAX_MODE {
@@ -118,17 +120,12 @@ impl Replay {
         for _ in 0..count {
             let gap = u32::try_from(r.varint()?).map_err(|_| Bad::Clock)?;
             ms = ms.checked_add(gap).ok_or(Bad::Clock)?;
-            let input = match r.varint()? {
-                0 => Input::Backspace,
-                1 => Input::End,
-                n => Input::Char(
-                    u32::try_from(n - 2)
-                        .ok()
-                        .and_then(char::from_u32)
-                        .ok_or(Bad::Char)?,
-                ),
-            };
-            inputs.push((ms, input));
+            let n = r.varint()?;
+            // format 1 has no picks: an op past the characters is junk there
+            if n >= PICK && format == FORMAT_1 {
+                return Err(Bad::Char);
+            }
+            inputs.push((ms, input(n).ok_or(Bad::Char)?));
         }
         let replay = Replay {
             engine,
@@ -149,6 +146,26 @@ impl Replay {
             _ => Err(Bad::Leftover),
         }
     }
+}
+
+/// An input as its op number (format 2): what the bytes and the rooms carry.
+pub fn op(input: Input) -> u64 {
+    match input {
+        Input::Backspace => 0,
+        Input::End => 1,
+        Input::Char(c) => c as u64 + 2,
+        Input::Pick(n) => PICK + n as u64,
+    }
+}
+
+/// The input an op number means, if any.
+pub fn input(op: u64) -> Option<Input> {
+    Some(match op {
+        0 => Input::Backspace,
+        1 => Input::End,
+        n if n >= PICK => Input::Pick(u8::try_from(n - PICK).ok()?),
+        n => Input::Char(char::from_u32(u32::try_from(n - 2).ok()?)?),
+    })
 }
 
 /// Unsigned LEB128: 7 bits a byte, the top bit says another follows.
@@ -225,6 +242,42 @@ mod tests {
         assert_eq!(Replay::decode(&want), Ok(blitz()));
     }
 
+    /// A pick makes it format 2: the same bytes, the pick an op past every
+    /// character. Format 1 readers (games before picks) refuse it.
+    #[test]
+    fn a_pick_makes_it_format_2() {
+        let r = Replay {
+            mode: "hot-one".into(),
+            inputs: vec![(0, Input::Char('h')), (9000, Input::Pick(3))],
+            ..blitz()
+        };
+        let bytes = r.encode();
+        assert_eq!(bytes[3], 2);
+        assert_eq!(&bytes[bytes.len() - 3..], &[0x85, 0x80, 0x44], "0x110005");
+        assert_eq!(Replay::decode(&bytes), Ok(r));
+        let mut as_1 = bytes.clone();
+        as_1[3] = 1;
+        assert_eq!(
+            Replay::decode(&as_1),
+            Err(Bad::Char),
+            "format 1 has no picks"
+        );
+        let mut big = bytes.clone();
+        big.truncate(big.len() - 3);
+        varint(&mut big, PICK + 256); // past any plate
+        assert_eq!(Replay::decode(&big), Err(Bad::Char));
+        for i in [
+            Input::Backspace,
+            Input::End,
+            Input::Char('é'),
+            Input::Pick(5),
+        ] {
+            assert_eq!(input(op(i)), Some(i));
+        }
+        assert_eq!(input(PICK + 256), None);
+        assert_eq!(input(0xd800 + 2), None, "a surrogate");
+    }
+
     #[test]
     fn round_trips_long_gaps_and_any_char() {
         let r = Replay {
@@ -247,8 +300,8 @@ mod tests {
         assert_eq!(Replay::decode(&[]), Err(Bad::Truncated));
         assert_eq!(Replay::decode(b"GIF89a"), Err(Bad::NotAReplay));
         let mut v = good.clone();
-        v[3] = 2;
-        assert_eq!(Replay::decode(&v), Err(Bad::Format(2)));
+        v[3] = 3;
+        assert_eq!(Replay::decode(&v), Err(Bad::Format(3)));
         for cut in 0..good.len() {
             assert!(Replay::decode(&good[..cut]).is_err(), "cut at {cut}");
         }

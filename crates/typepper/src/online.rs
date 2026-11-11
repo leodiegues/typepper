@@ -10,6 +10,8 @@ use crate::store;
 
 /// Rounds a linked player's outbox keeps until they go up.
 const OUTBOX: usize = 20;
+/// What a room says once its connection is gone.
+pub const GONE: &str = "lost typepper.com";
 
 /// The server's public host key: ssh refuses anything else.
 #[cfg(not(target_arch = "wasm32"))]
@@ -276,6 +278,94 @@ mod imp {
     /// The web puts links on the clipboard; a terminal's text can be selected.
     pub fn copy(_: &str) {}
 
+    /// A room for THE HOT ONE, open as long as its `ssh … v1 room` runs:
+    /// lines go in on its stdin, the room's come out on its stdout (a thread
+    /// reads them, so nothing waits). Hanging up is dropping it.
+    pub struct Room {
+        child: Child,
+        stdin: Option<std::process::ChildStdin>,
+        lines: std::sync::mpsc::Receiver<String>,
+        closed: bool,
+    }
+
+    impl Room {
+        /// Makes a room (no code) or joins one, as the linked player if
+        /// there is one, else as a guest.
+        pub fn open(code: Option<&str>) -> Result<Room, String> {
+            let pubkey = match account() {
+                Some(_) => "PubkeyAuthentication=yes",
+                None => "PubkeyAuthentication=no",
+            };
+            let arg = code.unwrap_or("new").to_string();
+            // ssh's own keepalives, so a quiet lobby isn't hung up on
+            let options = ["-o", pubkey, "-o", "ServerAliveInterval=10"];
+            let mut child = ssh(GAME_USER, &options, &["v1", "room", &arg])?
+                .env("SSH_ASKPASS", "typepper-asks-no-passphrases")
+                .env("SSH_ASKPASS_REQUIRE", "force")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|_| "ssh isn't installed".to_string())?;
+            let stdin = child.stdin.take();
+            let stdout = child.stdout.take().ok_or("no stdout")?;
+            let (tx, lines) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                for line in std::io::BufReader::new(stdout).lines() {
+                    let Ok(line) = line else { break };
+                    if tx.send(line).is_err() {
+                        break;
+                    }
+                }
+            });
+            Ok(Room {
+                child,
+                stdin,
+                lines,
+                closed: false,
+            })
+        }
+
+        /// One line to the room.
+        pub fn send(&mut self, line: &str) {
+            if let Some(stdin) = &mut self.stdin
+                && (writeln!(stdin, "{line}").is_err() || stdin.flush().is_err())
+            {
+                self.closed = true;
+            }
+        }
+
+        /// The lines that came since the last poll; `Err` once the
+        /// connection is gone (after whatever it still said).
+        pub fn poll(&mut self) -> Result<Vec<String>, String> {
+            let mut lines = Vec::new();
+            loop {
+                match self.lines.try_recv() {
+                    Ok(l) => lines.push(l),
+                    Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        self.closed = true;
+                        break;
+                    }
+                }
+            }
+            match (lines.is_empty(), self.closed) {
+                (true, true) => Err(super::GONE.into()),
+                _ => Ok(lines),
+            }
+        }
+    }
+
+    impl Drop for Room {
+        fn drop(&mut self) {
+            // closing stdin is hanging up; ssh goes once the server closes the channel
+            self.stdin.take();
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
     /// `typepper link <login>`: ties this machine's ssh key to a GitHub
     /// account (the server checks the key is on github.com/<login>.keys).
     /// Runs in the terminal, not the game, so the agent may ask as it likes.
@@ -445,6 +535,111 @@ mod imp {
         pub fn poll(&mut self) -> Option<Result<String, String>> {
             self.0.borrow_mut().take()
         }
+    }
+
+    /// A room for THE HOT ONE over a WebSocket (`/v1/room/new`, or
+    /// `/v1/room/<code>`); a logged-in browser plays as its login. Lines
+    /// land in a queue as they come; hanging up is dropping it.
+    pub struct Room {
+        socket: web_sys::WebSocket,
+        lines: Rc<RefCell<Vec<String>>>,
+        closed: Rc<RefCell<bool>>,
+        /// The callbacks stay alive as long as the room does.
+        _on: Vec<web_sys::wasm_bindgen::closure::Closure<dyn FnMut(web_sys::Event)>>,
+    }
+
+    impl Room {
+        pub fn open(code: Option<&str>) -> Result<Room, String> {
+            use web_sys::wasm_bindgen::JsCast;
+            use web_sys::wasm_bindgen::closure::Closure;
+            let api = api();
+            let (scheme, host) = api.split_once("://").unwrap_or(("https", &api));
+            let ws = if scheme == "http" { "ws" } else { "wss" };
+            let url = format!("{ws}://{host}/v1/room/{}", code.unwrap_or("new"));
+            let socket = web_sys::WebSocket::new(&url)
+                .map_err(|_| "couldn't reach typepper.com".to_string())?;
+            let lines = Rc::new(RefCell::new(Vec::new()));
+            let closed = Rc::new(RefCell::new(false));
+            let mut on = Vec::new();
+            let got = lines.clone();
+            let on_message = Closure::<dyn FnMut(web_sys::Event)>::new(move |e: web_sys::Event| {
+                if let Some(text) = e
+                    .dyn_ref::<web_sys::MessageEvent>()
+                    .and_then(|m| m.data().as_string())
+                {
+                    got.borrow_mut().extend(text.lines().map(str::to_string));
+                }
+            });
+            socket.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+            on.push(on_message);
+            for set in [
+                web_sys::WebSocket::set_onclose,
+                web_sys::WebSocket::set_onerror,
+            ] {
+                let gone = closed.clone();
+                let f = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+                    *gone.borrow_mut() = true;
+                });
+                set(&socket, Some(f.as_ref().unchecked_ref()));
+                on.push(f);
+            }
+            Ok(Room {
+                socket,
+                lines,
+                closed,
+                _on: on,
+            })
+        }
+
+        /// One line to the room (lines before the socket opens are kept
+        /// until it does; the browser queues them).
+        pub fn send(&mut self, line: &str) {
+            if self.socket.ready_state() == web_sys::WebSocket::CONNECTING {
+                // not open yet: the first lines wait a frame or two
+                self.pending_push(line);
+                return;
+            }
+            self.flush_pending();
+            if self.socket.send_with_str(&format!("{line}\n")).is_err() {
+                *self.closed.borrow_mut() = true;
+            }
+        }
+
+        fn pending_push(&mut self, line: &str) {
+            PENDING.with(|p| p.borrow_mut().push(line.to_string()));
+        }
+
+        fn flush_pending(&mut self) {
+            let pending: Vec<String> = PENDING.with(|p| std::mem::take(&mut *p.borrow_mut()));
+            for line in pending {
+                if self.socket.send_with_str(&format!("{line}\n")).is_err() {
+                    *self.closed.borrow_mut() = true;
+                }
+            }
+        }
+
+        pub fn poll(&mut self) -> Result<Vec<String>, String> {
+            if self.socket.ready_state() == web_sys::WebSocket::OPEN {
+                self.flush_pending();
+            }
+            let lines = std::mem::take(&mut *self.lines.borrow_mut());
+            match (lines.is_empty(), *self.closed.borrow()) {
+                (true, true) => Err(super::GONE.into()),
+                _ => Ok(lines),
+            }
+        }
+    }
+
+    impl Drop for Room {
+        fn drop(&mut self) {
+            PENDING.with(|p| p.borrow_mut().clear());
+            let _ = self.socket.close();
+        }
+    }
+
+    thread_local! {
+        /// Lines sent before the socket opened (one room at a time).
+        static PENDING: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
     }
 
     /// Off to GitHub to log in; the page comes back with `?login=`.

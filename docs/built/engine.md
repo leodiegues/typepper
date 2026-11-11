@@ -37,6 +37,7 @@ pub enum Mode {
     Survival { start_level: u32 },          // fuel that drains faster every level
     Lava { aim: Aim, start_level: u32 },    // FLOOR IS LAVA, lock-on or free
     Pursuit { start_level: u32 },           // HOT PURSUIT: a cop on your caret
+    HotOne,                                 // THE HOT ONE: plates of peppers (see below)
 }
 ```
 
@@ -45,10 +46,11 @@ Leveled modes start from 1, 4, 7 or 10 (`LEVELS`).
 
 | Method | Gives | Used for |
 |---|---|---|
-| `key()` | `time:30`, `words:25`, `zen`, `survival:4`, `lava:lock:4`, `lava:free:1`, `pursuit:7` | replays and the server's boards: stable forever |
+| `key()` | `time:30`, `words:25`, `zen`, `survival:4`, `lava:lock:4`, `lava:free:1`, `pursuit:7`, `hot-one` | replays and the server's boards: stable forever |
 | `parse(key)` | the mode, only if the game offers it (one spelling per mode) | refusing made-up modes, like `pursuit:99`, so they can't start boards of their own |
 | `name()` | `BLITZ 30s`, `FLOOR IS LAVA lock-on`, `HOT PURSUIT` | the screens, share pages, and local bests (as `… from lv4`) |
-| `start_level()`, `leveled()`, `from_level(n)` | the level, if any | the level picker, scores in words |
+| `start_level()`, `leveled()`, `from_level(n)` | the level, if any | the level picker |
+| `words_scored()` | the leveled modes and the hot one | scores in words, not wpm |
 
 Never change a key, or old replays and the boards' history stop meaning
 anything. `name()` is safe to restyle only alongside a migration of saved
@@ -58,7 +60,7 @@ bests, since the local bests file is keyed by it.
 
 ```rust
 pub struct Setup { pub mode: Mode, pub seed: u64 }
-pub enum Input { Char(char), Backspace, End }      // End: zen's esc
+pub enum Input { Char(char), Backspace, End, Pick(u8) }  // End: zen's esc (and a room's win); Pick: a pepper off the plate
 
 impl Round {
     pub fn new(setup: Setup) -> Round;             // t0 = now
@@ -94,6 +96,35 @@ itself (time up, fuel gone, cooked, busted, last word typed). If it doesn't
 end within 10 minutes of the last input, which happens to zen without its esc
 or a sprint left unfinished, there's no outcome.
 
+## THE HOT ONE
+
+A `Test` like the other endless modes, with a dinner on top (`test.rs`,
+the `hot_one` paths; nothing else in `Test` changed, so the golden numbers
+didn't move and `VERSION` stayed 1):
+
+- The clock runs from the round's start (`started` is set at `t0`), so
+  everyone at a table shares it.
+- A wrong key never lands (like pursuit) and is a **strike**; so is
+  `STALL_SECS` (3 s) without a key, once you've typed. A right key clears
+  them. `STRIKES` (3) in a row **serves a plate**; so does the clock every
+  `COURSE_SECS` (30 s), a course.
+- A plate (`Test::plate`) has `PLATE` (5) peppers minus the plates survived
+  (never fewer than one), plus one at rank `HOT` and above. Which one is the
+  hot one comes from the round's rng when it's served, so a replay serves
+  the same plate. Keys don't type while it's on the table, and don't go in
+  the log.
+- `Input::Pick(n)` bites pepper `n` (only `n < peppers`, only while the plate
+  is up; anything else is ignored and not logged). A plate left `PICK_SECS`
+  (8 s) picks for itself, from the rng.
+- A bite is **chewed** for `BITE_SECS` (1.6 s), nothing typing; then
+  `swallow`: the hot one sets `bitten` and finishes the round, any other
+  counts a plate survived.
+- `Input::End` finishes the round, as in zen: a room's last one standing
+  ends theirs with it.
+
+So a round with no inputs at all ends by itself (courses, self-picking
+plates, the one-pepper plate at the end): `simulate` never gives up on one.
+
 ## Determinism
 
 Four things make a round reproducible:
@@ -124,6 +155,7 @@ Four things make a round reproducible:
 | `same_numbers_on_every_platform` | three rounds recorded on macOS (score, words, end time, heat bits, score points, log length); CI re-checks them on Linux |
 | `splitmix64_reference_values` | the published SplitMix64 sequence |
 | `a_replay_plays_its_round_back` | round → bytes → `simulate` → the same outcome |
+| `hot_one_*` (four tests), `rounds_without_an_end_give_up` | strikes serve a plate, a mild bite is chewed then typed on from, the hot one ends it; courses on the clock and plates that pick themselves; stalls; plates shrink to one and heat adds a pepper; a round with no inputs ends on its own |
 
 The frame-rate test fails if the fixed timestep is removed (checked by
 hand), so it really guards it.

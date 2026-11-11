@@ -7,11 +7,12 @@ Playing typepper, and how it's built.
 | Doc | Read it for |
 |---|---|
 | [play/install.md](play/install.md) | the browser, the installers, `typepper upgrade` |
-| [play/modes.md](play/modes.md) | the six modes, levels, heat and ranks, what counts as a best |
+| [play/modes.md](play/modes.md) | the seven modes, levels, heat and ranks, what counts as a best |
 | [play/keys.md](play/keys.md) | every key, the settings, playing on a phone, flags |
 | [online/share.md](online/share.md) | sharing a round as a link |
 | [online/link.md](online/link.md) | linking your ssh key to your GitHub login |
 | [online/boards.md](online/boards.md) | the leaderboards, in the game and over HTTP |
+| [online/rooms.md](online/rooms.md) | THE HOT ONE with friends: hosting and joining a room |
 
 ## How it's built
 

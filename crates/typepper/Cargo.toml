@@ -21,4 +21,4 @@ terminal-colorsaurus = "1.0.3"
 ratzilla = "0.3.1"
 getrandom = { version = "0.4", features = ["wasm_js"] }
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["Clipboard", "CssStyleDeclaration", "Element", "FontFaceSet", "History", "MediaQueryList", "Navigator", "Request", "RequestCredentials", "RequestInit", "Response", "Storage"] }
+web-sys = { version = "0.3", features = ["Clipboard", "CssStyleDeclaration", "Element", "Event", "FontFaceSet", "History", "MediaQueryList", "MessageEvent", "Navigator", "Request", "RequestCredentials", "RequestInit", "Response", "Storage", "WebSocket"] }

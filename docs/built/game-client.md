@@ -8,6 +8,7 @@ extra:
     - crates/typepper/src/history.rs
     - crates/typepper/src/store.rs
     - crates/typepper/src/main.rs
+    - crates/typepper/src/room.rs
 ---
 
 # The game's online side
@@ -31,6 +32,7 @@ nothing blocks the game.
 | u on the history screen | that round goes up | `online` on, not a touch screen |
 | `?replay=<id>` on the web | `GET /v1/runs/<id>` | the URL asks for it |
 | starting the web game | `GET /v1/me/bests` | logged in, `online` on |
+| THE HOT ONE's card: host a room, or join one | `v1 room new` / `v1 room <code>` (web: the WebSocket), open until you leave | `online` on, chosen on the card |
 
 Nothing else at startup, never while playing, never retried in the
 background. The bests fetch isn't waited on: the game starts at once, a
@@ -55,6 +57,12 @@ pub fn rows(text: &str) -> Result<Vec<Row>, String>;            // a board
 pub fn replay(text: &str) -> Result<Vec<u8>, String>;           // a `v1 replay` answer
 pub fn account() -> Option<String>;                             // linked, or logged in on the web
 pub fn outbox_add(..); pub fn outbox() -> ..; pub fn outbox_settle(..);
+pub struct Room;                                  // a room's connection, open until dropped
+impl Room {
+    pub fn open(code: Option<&str>) -> Result<Room, String>;  // new, or by code
+    pub fn send(&mut self, line: &str);
+    pub fn poll(&mut self) -> Result<Vec<String>, String>;    // the lines since; Err once it's gone
+}
 // desktop: link(), unlink()   web: log_in(), log_out(), arrived() (reads ?login=)
 ```
 
@@ -101,6 +109,30 @@ Rounds played logged out never join the outbox: on a shared browser, the
 next person to log in would claim them. Logged in, the game asks
 `/v1/me/bests` as it starts, and `Bests::merge` keeps the higher of each
 mode's best, so bests set in the terminal show on the mode cards.
+
+## Rooms
+
+`room.rs` is the screen; `online::Room` the connection. On desktop it's the
+system `ssh` again, run with the same options as a call plus
+`ServerAliveInterval=10`, its stdin and stdout piped: a thread reads the
+server's lines into a channel, `send` writes a line, and dropping it hangs
+up. On the web it's a `WebSocket` to `/v1/room/…` (`ws` for a local
+`?api=http://…`, `wss` otherwise), its messages queued as they come; lines
+sent before it opens wait for it. Neither ever blocks a frame.
+
+The screen plays the lines in [the protocol](../reference/protocol.md#rooms):
+`ok` and `peer` make the lobby; `go` starts a countdown, and when it ends a
+`Round` of yours and one per peer begin on the seed. Each frame, your round's
+new log entries go up as `in` lines, the others' `in` lines land on their
+rounds (which `advance` on the wall clock between keys, so their stalls and
+courses come as they would), and your finished round goes up once as
+`done <hex>`. `win` for you ends your round with `Input::End`. A `ping`
+goes every 10 s.
+
+Your round at a table is a round of yours: it's scored, kept in the history
+and, linked or logged in, put in the outbox like any other (the app reads it
+from the room). Esc leaves (the connection drops, and the server seats you
+out); a dropped connection shows as `lost typepper.com`.
 
 ## Sharing and saving
 

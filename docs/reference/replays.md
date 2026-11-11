@@ -79,6 +79,14 @@ by accident, it fails.
 - **Enum numbers for the mode.** Reordering `Mode`'s variants would silently
   break old replays; its text key can't.
 
+## Format 2
+
+The same bytes as format 1, with one more kind of op: `n ≥ 0x110002` is the
+pick `n − 0x110002`, THE HOT ONE's pepper off the plate (format 1 stops at
+`char::MAX + 2`). A replay is written as format 2 only when it has a pick in
+it, so every other round still reads in games from before picks existed;
+readers take both. The `a_pick_makes_it_format_2` test pins the bytes.
+
 ## Decoding
 
 `Replay::decode(bytes)` takes exactly one replay;
@@ -89,10 +97,10 @@ for a submission's back-to-back replays. Neither panics on any input.
 |---|---|
 | `TooBig` | over 1 MiB (`MAX_BYTES`, about 7 hours of zen at 60 wpm) |
 | `NotAReplay` | the magic isn't `TPR` |
-| `Format(n)` | a format other than 1 |
+| `Format(n)` | a format other than 1 or 2 |
 | `Truncated` | bytes run out, or `count` claims more inputs than bytes could hold |
 | `Mode` | the mode key is over 32 bytes or not UTF-8 |
-| `Char` | an op that isn't a Unicode scalar value (a surrogate, past `char::MAX`) |
+| `Char` | an op that isn't a Unicode scalar value (a surrogate, past `char::MAX`), a pick past 255, or a pick in a format 1 replay |
 | `Leftover` | bytes after the last input (`decode` only) |
 | `Clock` | the inputs' times run past `u32` ms |
 

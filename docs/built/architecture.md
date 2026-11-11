@@ -39,8 +39,8 @@ flowchart LR
     PG[("typepper-postgres")]
   end
   GH["GitHub<br/>(public keys, user ids)"]
-  T -- "ssh.typepper.com:36080<br/>submit · link · board" --> S
-  W -- "https://api.typepper.com<br/>submit · replays · boards" --> S
+  T -- "ssh.typepper.com:36080<br/>submit · link · board · room" --> S
+  W -- "https://api.typepper.com<br/>submit · replays · boards · room (WebSocket)" --> S
   F -- "share page" --> S
   S -- "redirect to typepper.com/?replay=…" --> W
   S --> PG
@@ -113,6 +113,16 @@ sequenceDiagram
 Watching goes the other way: a share link's page sends the browser to
 `typepper.com/?replay=<id>`, and the game fetches the bytes and plays them
 through the same engine and the same screens, in real time.
+
+## Rooms
+
+THE HOT ONE's rooms are the one live thing: a connection each player keeps
+open (an SSH channel, or a WebSocket) while the server relays every input to
+the others, who play them through the same engine. The server never
+simulates live; when a player's round ends they send its replay, and the
+server plays that to decide when they went out and with how many words. See
+[server](server.md#rooms), [game client](game-client.md#rooms) and
+[the protocol](../reference/protocol.md#rooms).
 
 ## Trust
 
