@@ -15,7 +15,7 @@ FROM ghcr.io/getzola/zola:v0.23.6@sha256:722c7af3c6a7c0ccc37f01d85d47ee3e8b53ea6
 COPY --from=prepare /src/site /site
 RUN ["/zola", "--root", "/site", "build"]
 
-FROM joseluisq/static-web-server:2@sha256:94618e3d17802265a21926217e6f9e7832b311b6fbf5933684001739fafed06a
+FROM joseluisq/static-web-server:2@sha256:ccf2d666ffe5f8ef2ec96bc40f07757605998c04b78f7d8fdb98a584dd4f5717
 COPY --from=build /site/public /public
 # PORT is Railway's: its domain and health check go there
 ENV SERVER_ROOT=/public SERVER_PORT=8080
