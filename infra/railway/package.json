@@ -3,6 +3,6 @@
   "description": "typepper on Railway: the IaC SDK railway.ts imports (the CLI comes from mise.toml)",
   "type": "module",
   "devDependencies": {
-    "railway": "3.16.0"
+    "railway": "3.17.0"
   }
 }
